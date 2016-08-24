@@ -238,7 +238,7 @@ foreach (@prefixes) {
 		# Convert gbk to seed
 		`python "$params{genbank_to_seed}" "$gbk_file_name" "$seed_file_name"`;
 		# Convert gbk to fasta
-		`$params{genbank_to_fasta} -i "$gbk_file_name" -m genbank -s whole -o "$_.fna"`;
+		`$params{genbank_to_fasta} -i "$gbk_file_name" -m genbank -s whole -a accessions -o "$_.fna"`;
 		# Move fasta file into new directory
 		move $params{"input_path"}."/$_.fna", $fasta_file_name;
 		# TODO check formats of fasta definition lines
