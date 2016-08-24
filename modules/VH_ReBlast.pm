@@ -62,6 +62,22 @@ sub run {
 						}
 					}
 				}
+
+				# One more time to parse the final sequence
+				if($seqname ne ""){
+					# Grab predictions from sequence
+					my $predCount = 1;
+					for (my $bin = 0; $bin < 4; $bin++) {
+						foreach my $prediction (@{$predictions->{$prefix}[$bin]}){
+							if ($seqname eq $prediction->{'sequence'}){
+								print $queryfh '>'.$prefix.'-'.$seqname.'-'.$predCount."\n";
+								print $queryfh substr($sequence,$prediction->{'start'}-1,$prediction->{'end'}-$prediction->{'start'})."\n";
+								$query_lengths{$prefix.'-'.$seqname.'-'.$predCount} = $prediction->{'end'}-$prediction->{'start'}+1;
+								$predCount++;
+							}
+						}
+					}
+				}
 			}
 		}
 		print "Done.\n";
