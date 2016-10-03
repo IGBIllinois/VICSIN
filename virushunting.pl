@@ -140,7 +140,8 @@ my %params = (
 	"masking_file"=>"",
 	"missed_element_padding"=>5,
 	"mcl_inflation"=>2.0,
-	"overhang_threshold"=>100
+	"overhang_threshold"=>100,
+	"merge_threshold"=>1500
 );
 
 # First, read in the config file, if provided
@@ -180,7 +181,8 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"masking_file=s"=>\$params{"masking_file"},
 			"missed_element_padding=i"=>\$params{"missed_element_padding"},
 			"mcl_inflation=f"=>\$params{"mcl_inflation"},
-			"overhang_threshold=i"=>\$params{"overhang_threshold"}
+			"overhang_threshold=i"=>\$params{"overhang_threshold"},
+			"merge_threshold=i"=>\$params{"merge_threshold"}
 			);
 
 foreach my $k (sort keys %params) {
@@ -438,20 +440,144 @@ sub overlap_exists {
 	return $found_overlap;
 }
 
+# Merges the predictions in the given array as much as possible
+# TODO ignore masked-out predictions
+sub merge_predictions {
+	my $mergeable_predictions = shift;
+
+	# Merge until there ain't no more to merge
+	my $found_merges;
+	my %merged_predictions;
+	foreach my $sequence (keys %{$mergeable_predictions}){
+		do {
+			# print Dumper($mergeable_predictions{$sequence});
+			$merged_predictions{$sequence} = [];
+			$found_merges = 0;
+			for (my $i = 0; $i < scalar(@{$mergeable_predictions->{$sequence}}); $i++){
+				my $found_match = 0; 
+				for (my $j=0; $j < scalar(@{$merged_predictions{$sequence}}); $j++){
+					# If predictions overlap or are within merge_threshold of each other
+					if($found_match == 0 
+						and $mergeable_predictions->{$sequence}[$i]{'start'}<=$merged_predictions{$sequence}[$j]{'end'}+$params{'merge_threshold'}
+						and $merged_predictions{$sequence}[$j]{'start'}<=$mergeable_predictions->{$sequence}[$i]{'end'}+$params{'merge_threshold'}){
+						$found_match = 1;
+						$found_merges = 1;
+						# Expand bounds of j to contain i
+						if($mergeable_predictions->{$sequence}[$i]{'start'}<$merged_predictions{$sequence}[$j]{'start'}){
+							$merged_predictions{$sequence}[$j]{'start'} = $mergeable_predictions->{$sequence}[$i]{'start'};
+						}
+						if($mergeable_predictions->{$sequence}[$i]{'end'}>$merged_predictions{$sequence}[$j]{'end'}){
+							$merged_predictions{$sequence}[$j]{'end'} = $mergeable_predictions->{$sequence}[$i]{'end'};
+						}
+						# TODO merge methods string intelligently
+						foreach my $method (@{$mergeable_predictions->{$sequence}[$i]{'methods'}}){
+							if(not grep(/^$method$/,@{$merged_predictions{$sequence}[$j]{'methods'}})){
+								push @{$merged_predictions{$sequence}[$j]{'methods'}}, $method;
+							}
+						}
+					}
+				}
+				if($found_match == 0){
+					# If this prediction didn't overlap with any others, add it to the array
+					push @{$merged_predictions{$sequence}}, $mergeable_predictions->{$sequence}[$i];
+				}
+			}
+			$mergeable_predictions->{$sequence} = [];
+			push @{$mergeable_predictions->{$sequence}},@{$merged_predictions{$sequence}};
+		} while ($found_merges == 1);
+	}
+
+	return %merged_predictions;
+}
+
+sub bin_predictions {
+	my $merged_predictions = shift;
+	my $predictions = shift;
+	my $prefix = shift;
+	my $methods = shift;
+
+	my @binned_predictions = ([],[],[],[],[]);
+	# First pass: compare non-extending predictions with extending predictions
+	
+	foreach my $sequence (keys %{$merged_predictions}){
+		for (my $j = 0; $j < scalar(@{$merged_predictions->{$sequence}}); $j++){
+			for(my $i=0; $i<scalar(@{$methods}); $i++){
+				if($methods->[$i]{'extend'} == 0){
+					if(exists $predictions->{$prefix}{$methods->[$i]{'key'}}{$sequence}){
+						if(overlap_exists($merged_predictions->{$sequence}[$j],$predictions->{$prefix}{$methods->[$j]{'key'}}{$sequence}) == 1){
+							push @{$merged_predictions->{$sequence}[$j]{'methods'}},$methods->[$i]{'abbr'};
+						}
+					}
+				}
+			}
+			my $bin;
+			if(scalar(@{$merged_predictions->{$sequence}[$j]{'methods'}}) > 2){
+				$bin = 0;
+			} elsif(scalar(@{$merged_predictions->{$sequence}[$j]{'methods'}}) == 2) {
+				$bin = 1;
+			} elsif (scalar(@{$merged_predictions->{$sequence}[$j]{'methods'}}) == 1){
+				for(my $k=0; $k<scalar(@{$methods}); $k++){
+					if($methods->[$k]{'abbr'} eq $merged_predictions->{$sequence}[$j]{'methods'}[0]){
+						$bin = $methods->[$k]{'bin'};
+					}
+				}
+			}
+			push @{$binned_predictions[$bin]}, {'sequence'=>$sequence,'methods'=>join(',',@{$merged_predictions->{$sequence}[$j]{'methods'}}),'start'=>$merged_predictions->{$sequence}[$j]{'start'},'end'=>$merged_predictions->{$sequence}[$j]{'end'}};
+		}
+	}
+
+	# Second pass: compare non-extending predictions amongst themselves
+	for(my $i=0;$i<scalar @{$methods}; $i++) {
+		if($methods->[$i]{'extend'}==0){ # Only compare methods we haven't already merged
+			foreach my $sequence (keys %{ $predictions->{$prefix}{$methods->[$i]{'key'}}}){
+				foreach my $prediction ( @{ $predictions->{$prefix}{$methods->[$i]{'key'}}{$sequence} }){
+					if(not exists $prediction->{'used'} and $prediction->{'start'}>0 and $prediction->{'end'}>0){ 
+						my $used_methods = $methods->[$i]{'abbr'};
+						my $matches = 1;
+						for(my $j=$i+1; $j<scalar @{$methods}; $j++){
+							if($methods->[$j]{'extend'}==0){
+								if(exists $predictions->{$prefix}{$methods->[$j]{'key'}}{$sequence}){
+									if(overlap_exists($prediction,$predictions->{$prefix}{$methods->[$j]{'key'}}{$sequence}) == 1){
+										$matches++;
+										$used_methods .= ",".$methods->[$j]{'abbr'};
+									}
+								}
+							}
+						}
+						my $bin;
+						if($matches > 2){
+							$bin = 0;
+						} elsif($matches == 2){
+							$bin = 1;
+						} elsif($matches == 1){
+							$bin = $methods->[$i]{'bin'};
+						}
+						push @{$binned_predictions[$bin]}, {'sequence'=>$sequence,'methods'=>$used_methods,'start'=>$prediction->{'start'},'end'=>$prediction->{'end'}};
+					}
+				}
+			}
+		}
+	}
+
+	return \@binned_predictions;
+}
+
 print VH_helpers->current_time()."Processing output\n";
 my %predictions;
+my %merged_predictions;
 my %binned_predictions;
 my @methods = (
-	{'key'=>'agent','abbr'=>'A','bin'=>2},
-	{'key'=>'virsorter','abbr'=>'V','bin'=>2},
-	{'key'=>'phispy','abbr'=>'P','bin'=>3}
+	{'key'=>'agent','abbr'=>'A','bin'=>2,'extend'=>1},
+	{'key'=>'virsorter','abbr'=>'V','bin'=>2,'extend'=>1},
+	{'key'=>'phispy','abbr'=>'P','bin'=>3,'extend'=>0}
 );
 if($ran_known_types){
-	push @methods, {'key'=>'blast','abbr'=>'B','bin'=>2};
+	push @methods, {'key'=>'blast','abbr'=>'B','bin'=>2,'extend'=>1};
 }
 if($ran_crispr){
-	push @methods, {'key'=>'crispr','abbr'=>'C','bin'=>4};
+	push @methods, {'key'=>'crispr','abbr'=>'C','bin'=>4,'extend'=>0};
 }
+push @methods, {'key'=>'reblast','abbr'=>'R','bin'=>2,'extend'=>1};
 
 foreach my $prefix (@valid_prefixes){
 	print VH_helpers->current_time()."\tProcessing $prefix...\n";
@@ -491,7 +617,8 @@ foreach my $prefix (@valid_prefixes){
 						foreach my $prediction (@{$predictions{$prefix}{$method}{$sequence}}){
 							if($mask->{'start'}<=$prediction->{'start'} and $mask->{'end'}>=$prediction->{'end'}){
 								# Prediction entirely contained within mask; set to ignore prediction
-								$prediction->{'used'} = 1; # Ignoring is _much_ easier than removing from the array
+								$prediction->{'start'} = -1; # Ignoring is _much_ easier than removing from the array
+								$prediction->{'end'} = -1;
 							} elsif ($mask->{'start'}<=$prediction->{'start'} and $mask->{'end'}>=$prediction->{'start'}) {
 								# Prediction's left side overlaps mask; trim left side
 								$prediction->{'start'} = $mask->{'end'}+1;
@@ -500,7 +627,8 @@ foreach my $prefix (@valid_prefixes){
 								$prediction->{'end'} = $mask->{'start'}-1;
 							} elsif ($mask->{'start'}>$prediction->{'start'} and $mask->{'end'}<$prediction->{'end'} and not exists $prediction->{'used'}) {
 								# Prediction contains a masked area within it; set to ignore prediction
-								$prediction->{'used'} = 1; # Ignoring is _much_ easier than removing from the array
+								$prediction->{'start'} = -1; # Ignoring is _much_ easier than removing from the array
+								$prediction->{'end'} = -1;
 								# Prediction contains a masked area within it; split into two predictions. Don't split ignored predictions.
 								# push @predictions_to_add, {'start'=>$mask->{'end'}+1,'end'=>$prediction->{'end'}};
 								# $prediction->{'end'} = $mask->{'start'}-1;
@@ -514,46 +642,77 @@ foreach my $prefix (@valid_prefixes){
 		print "Done.\n";
 	}
 
-	#Compare results
-	print VH_helpers->current_time()."\t\tCross-referencing predictions... ";
-	$binned_predictions{$prefix} = [[],[],[],[],[]];
-	for(my $i=0;$i<scalar @methods; $i++) {
-		foreach my $sequence (keys %{ $predictions{$prefix}{$methods[$i]{'key'}}}){
-			foreach my $prediction ( @{ $predictions{$prefix}{$methods[$i]{'key'}}{$sequence} }){
-				if(not exists $prediction->{'used'}){
-					my $used_methods = $methods[$i]{'abbr'};
-					my $matches = 1;
-					for(my $j=$i+1; $j<scalar @methods; $j++){
-						if(exists $predictions{$prefix}{$methods[$j]{'key'}}{$sequence}){
-							if(overlap_exists($prediction,$predictions{$prefix}{$methods[$j]{'key'}}{$sequence}) == 1){
-								$matches++;
-								$used_methods .= ",".$methods[$j]{'abbr'};
-							}
-						}
-					}
-					my $bin;
-					if($matches > 2){
-						$bin = 0;
-					} elsif($matches == 2){
-						$bin = 1;
-					} elsif($matches == 1){
-						$bin = $methods[$i]{'bin'};
-					}
-					push @{$binned_predictions{$prefix}[$bin]}, {'sequence'=>$sequence,'methods'=>$used_methods,'start'=>$prediction->{'start'},'end'=>$prediction->{'end'}};
+	#Merge results
+	print VH_helpers->current_time()."\t\tMerging predictions... ";
+	my %mergeable_predictions;
+	# Dump mergeable predictions into one array
+	for(my$i=0; $i<scalar(@methods); $i++){
+		if($methods[$i]{'extend'} == 1){ # We only want to merge Agent, Virsorter, and Blast hits
+			foreach my $sequence (keys %{$predictions{$prefix}{$methods[$i]{'key'}}}){
+				my @predictions_to_add;
+				foreach my $prediction (@{$predictions{$prefix}{$methods[$i]{'key'}}{$sequence}}){
+					push @predictions_to_add, {"methods"=>[$methods[$i]{'abbr'}],"start"=>$prediction->{'start'},"end"=>$prediction->{'end'}};
 				}
+				push @{$mergeable_predictions{$sequence}}, @predictions_to_add;
 			}
 		}
 	}
+	
+	my %merged_predictions = merge_predictions(\%mergeable_predictions);
+	print "Done.\n";
 
+	#Compare results
+	print VH_helpers->current_time()."\t\tCross-referencing predictions... ";
+	$binned_predictions{$prefix} = bin_predictions(\%merged_predictions,\%predictions,$prefix,\@methods);
 	print "Done.\n";
 }
 print "\n";
 
 ### STEP 5. RE-SCREEN PREDICTIONS AGAINST OTHER GENOMES FOR MISSED ELEMENTS ###
 my $reblast_predictions = VH_ReBlast->run(\%params,\@valid_prefixes,\%binned_predictions,\%masks,\%contigs);
+print VH_helpers::current_time()." Final merge...\n";
 foreach my $prefix (@valid_prefixes){
-	push @{$binned_predictions{$prefix}[2]}, @{$reblast_predictions->{$prefix}};
+	print VH_helpers::current_time()."\t$prefix... ";
+	# unset 'used' on all predictions
+	foreach my $method (keys %{$predictions{$prefix}}){
+		foreach my $sequence (keys %{$predictions{$prefix}{$method}}){
+			foreach my $prediction (@{$predictions{$prefix}{$method}{$sequence}}){
+				if($prediction->{'start'}>0 and $prediction->{'end'}>0){
+					delete $prediction->{'used'};
+				}
+			}
+		}
+	}
+	# Merge again
+	my %mergeable_predictions;
+	# Dump mergeable predictions into one array
+	for(my$i=0; $i<scalar(@methods); $i++){
+		if($methods[$i]{'extend'} == 1){ # We only want to merge Agent, Virsorter, and Blast hits
+			foreach my $sequence (keys %{$predictions{$prefix}{$methods[$i]{'key'}}}){
+				my @predictions_to_add;
+				foreach my $prediction (@{$predictions{$prefix}{$methods[$i]{'key'}}{$sequence}}){
+					push @predictions_to_add, {"methods"=>[$methods[$i]{'abbr'}],"start"=>$prediction->{'start'},"end"=>$prediction->{'end'}};
+				}
+				push @{$mergeable_predictions{$sequence}}, @predictions_to_add;
+			}
+		}
+	}
+	foreach my $prediction (@{$reblast_predictions->{$prefix}}){
+		if(not exists $prediction->{'masked'}){
+			if(not exists $mergeable_predictions{$prediction->{'sequence'}}){
+				$mergeable_predictions{$prediction->{'sequence'}} = [];
+			}
+			push @{$mergeable_predictions{$prediction->{'sequence'}}}, {'methods'=>['R'],'start'=>$prediction->{'start'},'end'=>$prediction->{'end'}};
+		}
+	}
+	my %merged_predictions = merge_predictions(\%mergeable_predictions);
+
+	# Bin again
+	$binned_predictions{$prefix} = bin_predictions(\%merged_predictions,\%predictions,$prefix,\@methods);
+	# push @{$binned_predictions{$prefix}[2]}, @{$reblast_predictions->{$prefix}};
+	print "Done.\n";
 }
+print "\n";
 
 print VH_helpers::current_time()."Saving Output...\n";
 foreach my $prefix (@valid_prefixes){

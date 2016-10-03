@@ -3,7 +3,7 @@
 package VH_VirSorter;
 
 use File::Path qw(make_path);
-use File::Copy;
+use File::Copy qw(mv);
 use VH_helpers;
 
 no define CONVERTED_INPUT_DIR =>;
@@ -40,8 +40,9 @@ sub run {
 			`cd $wdir; $params->{virsorter} -d $_ --fna $fasta_file_name --db $params->{virsorter_database} --data-dir $data_dir 2>&1; cd -`;
 			
 			# Move mga file to its final destination
-			move($mga_file_name,$mga_dest_file_name);
-			VH_helpers::clean_folder($wdir,[$csv_file_name,$mga_dest_file_name,$wdir."/log_out",$wdir."/log_err"]);
+			mv($mga_file_name,$mga_dest_file_name);
+			unlink($lock_file_name);
+			# VH_helpers::clean_folder($wdir,[$csv_file_name,$mga_dest_file_name,$wdir."/log_out",$wdir."/log_err"]);
 
 			print "Done.\n";
 		}

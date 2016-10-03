@@ -67,7 +67,7 @@ sub run {
 				if($seqname ne ""){
 					# Grab predictions from sequence
 					my $predCount = 1;
-					for (my $bin = 0; $bin < 4; $bin++) {
+					for (my $bin = 0; $bin < 2; $bin++) {
 						foreach my $prediction (@{$predictions->{$prefix}[$bin]}){
 							if ($seqname eq $prediction->{'sequence'}){
 								print $queryfh '>'.$prefix.'-'.$seqname.'-'.$predCount."\n";
