@@ -128,6 +128,9 @@ my %params = (
 	"mcxload"=>"mcxload",
 	"mcl"=>"mcl",
 	"mcxdump"=>"mcxdump",
+	"blast_to_mcl"=>"Blast_to_MCL.1.py",
+	"core_genome_cluster_test"=>"core_genome_cluster_test.pl",
+	"mcldump2clusters"=>"MCLdump2clusters.pl",
 	"phispy_windowsize"=>40,
 	"phispy_threshold"=>20,
 	"spine_percent_input"=>100,
@@ -138,10 +141,19 @@ my %params = (
 	"known_viral_types"=>"",
 	"virsorter_database"=>1,
 	"masking_file"=>"",
-	"missed_element_padding"=>5,
 	"mcl_inflation"=>2.0,
 	"overhang_threshold"=>100,
-	"merge_threshold"=>1500
+	"merge_threshold"=>1500,
+	"clustering_parameter"=>"percent_length_aligned",
+	"reblast_min_perc_id"=>90,
+	"reblast_min_perc_length"=>50,
+	"reblast_edge_distance"=>5,
+	"reblast_distance"=>5,
+	"cluster_core_congruence"=>0.66,
+	"percent_id_min_core"=>90,
+	"cluster_min_perc_length"=>0.8,
+	"cluster_min_length"=>100,
+	"cluster_min_bit_score"=>100.0
 );
 
 # First, read in the config file, if provided
@@ -169,6 +181,9 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"mcxload=s"=>\$params{"mcxload"},
 			"mcl=s"=>\$params{"mcl"},
 			"mcxdump=s"=>\$params{"mcxdump"},
+			"blast_to_mcl=s"=>\$params{"blast_to_mcl"},
+			"core_genome_cluster_test=s"=>\$params{"core_genome_cluster_test"},
+			"mcldump2clusters=s"=>\$params{"mcldump2clusters"},
 			"phispy_windowsize=i"=>\$params{"phispy_windowsize"},
 			"phispy_threshold=i"=>\$params{"phispy_threshold"},
 			"spine_percent_input=i"=>\$params{"spine_percent_input"},
@@ -179,10 +194,16 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"known_viral_types=s"=>\$params{"known_viral_types"},
 			"virsorter_database=i"=>\$params{"virsorter_database"},
 			"masking_file=s"=>\$params{"masking_file"},
-			"missed_element_padding=i"=>\$params{"missed_element_padding"},
 			"mcl_inflation=f"=>\$params{"mcl_inflation"},
 			"overhang_threshold=i"=>\$params{"overhang_threshold"},
-			"merge_threshold=i"=>\$params{"merge_threshold"}
+			"merge_threshold=i"=>\$params{"merge_threshold"},
+			"clustering_parameter=s"=>\$params{"clustering_parameter"},
+			"reblast_min_perc_id=i"=>\$params{"reblast_min_perc_id"},
+			"reblast_min_perc_length=i"=>\$params{"reblast_min_perc_length"},
+			"reblast_edge_distance=i"=>\$params{"reblast_edge_distance"},
+			"reblast_distance=i"=>\$params{"reblast_distance"},
+			"cluster_core_congruence=f"=>\$params{"cluster_core_congruence"},
+			"percent_id_min_core=i"=>\$params{"percent_id_min_core"}
 			);
 
 foreach my $k (sort keys %params) {
@@ -749,5 +770,5 @@ print "\n";
 # if($params{"known_viral_types"} eq ""){
 # 	print VH_helpers->current_time()."No phage database given. Skipping clustering.\n";
 # } else {
-# 	VH_Cluster->run(\%params,\@valid_prefixes,\%binned_predictions);
+	VH_Cluster->run(\%params,\@valid_prefixes,\%binned_predictions);
 # }

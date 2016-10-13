@@ -202,8 +202,8 @@ sub run {
 				for (my $j = 0; $j < scalar(@combined_predictions); $j++) {
 					#If results overlap
 					if($found_match == 0 and $masked_predictions[$i]{'sequence'}==$combined_predictions[$j]{'sequence'} 
-						and $masked_predictions[$i]{'start'}<=$combined_predictions[$j]{'end'}+$params->{'missed_element_padding'} 
-						and $combined_predictions[$j]{'start'}<=$masked_predictions[$i]{'end'}+$params->{'missed_element_padding'}){
+						and $masked_predictions[$i]{'start'}<=$combined_predictions[$j]{'end'}+$params->{'reblast_distance'} 
+						and $combined_predictions[$j]{'start'}<=$masked_predictions[$i]{'end'}+$params->{'reblast_distance'}){
 						$found_match = 1;
 						$found_overlaps = 1;
 						# Expand bounds of j to contain i
@@ -230,13 +230,13 @@ sub run {
 		print VH_helpers->current_time()."\t\tExcluding based on length/% identity... ";
 		foreach my $prediction (@combined_predictions){
 			# TODO implement new rules based on end-ness
-			if($prediction->{'start'} <= $params->{'missed_element_padding'} xor $prediction->{'end'}>=$contigs->{$curprefix}{$prediction->{'sequence'}}{'length'}-$params->{'missed_element_padding'}){
-				if($prediction->{'perc_identity'} < 90){
+			if($prediction->{'start'} <= $params->{'reblast_edge_distance'} xor $prediction->{'end'}>=$contigs->{$curprefix}{$prediction->{'sequence'}}{'length'}-$params->{'reblast_edge_distance'}){
+				if($prediction->{'perc_identity'} < $params->{"reblast_min_perc_id"}){
 					# If hit touches either contig end (not both), min 90% ident
 					$prediction->{'masked'} = 1;
 				}
-			} elsif ($prediction->{'start'}>$params->{'missed_element_padding'} and $prediction->{'end'}<$contigs->{$curprefix}{$prediction->{'sequence'}}{'length'}-$params->{'missed_element_padding'}){
-				if($prediction->{'perc_identity'}<90 or $prediction->{'end'}-$prediction->{'start'}<0.5*$query_lengths{$prediction->{'query_seq'}}){
+			} elsif ($prediction->{'start'}>$params->{'reblast_edge_distance'} and $prediction->{'end'}<$contigs->{$curprefix}{$prediction->{'sequence'}}{'length'}-$params->{'reblast_edge_distance'}){
+				if($prediction->{'perc_identity'}<$params->{"reblast_min_perc_id"} or $prediction->{'end'}-$prediction->{'start'}<($params->{"reblast_min_perc_length"}/100.0)*$query_lengths{$prediction->{'query_seq'}}){
 					# If hit touches neither contig end, min 90% ident, min 50% of query length
 					$prediction->{'masked'} = 1;
 				}
