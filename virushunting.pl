@@ -122,6 +122,7 @@ my %params = (
 	"virsorter_data_dir"=>"/data", # This is the virsorter's builtin default
 	"phispy"=>"phispy.py",
 	"blastn"=>"blastn",
+	"makeblastdb"=>"makeblastdb",
 	"spine"=>"spine.pl",
 	"agent"=>"AGEnt.pl",
 	"cut"=>"cut",
@@ -150,10 +151,11 @@ my %params = (
 	"reblast_edge_distance"=>5,
 	"reblast_distance"=>5,
 	"cluster_core_congruence"=>0.66,
-	"percent_id_min_core"=>90,
+	"percent_id_min_core"=>85,
 	"cluster_min_perc_length"=>0.8,
 	"cluster_min_length"=>100,
-	"cluster_min_bit_score"=>100.0
+	"cluster_min_bit_score"=>100.0,
+	"cluster_core_max_distance"=>10
 );
 
 # First, read in the config file, if provided
@@ -175,6 +177,7 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"virsorter_data_dir=s"=>\$params{"virsorter_data_dir"},
 			"phispy=s"=>\$params{"phispy"},
 			"blastn=s"=>\$params{"blastn"},
+			"makeblastdb=s"=>\$params{"makeblastdb"},
 			"spine=s"=>\$params{"spine"},
 			"agent=s"=>\$params{"agent"},
 			"cut=s"=>\$params{"cut"},
@@ -203,7 +206,11 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"reblast_edge_distance=i"=>\$params{"reblast_edge_distance"},
 			"reblast_distance=i"=>\$params{"reblast_distance"},
 			"cluster_core_congruence=f"=>\$params{"cluster_core_congruence"},
-			"percent_id_min_core=i"=>\$params{"percent_id_min_core"}
+			"percent_id_min_core=i"=>\$params{"percent_id_min_core"},
+			"cluster_min_perc_length=f"=>\$params{"cluster_min_perc_length"},
+			"cluster_min_length=i"=>\$params{"cluster_min_length"},
+			"cluster_min_bit_score=f"=>\$params{"cluster_min_bit_score"},
+			"cluster_core_max_distance=i"=>\$params{"cluster_core_max_distance"}
 			);
 
 foreach my $k (sort keys %params) {
