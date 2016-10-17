@@ -42,7 +42,7 @@ sub run {
 			# Move mga file to its final destination
 			mv($mga_file_name,$mga_dest_file_name);
 			unlink($lock_file_name);
-			# VH_helpers::clean_folder($wdir,[$csv_file_name,$mga_dest_file_name,$wdir."/log_out",$wdir."/log_err"]);
+			VH_helpers::clean_folder($wdir,[$csv_file_name,$mga_dest_file_name,$wdir."/log_out",$wdir."/log_err"]);
 
 			print "Done.\n";
 		}

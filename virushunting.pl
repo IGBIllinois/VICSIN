@@ -429,38 +429,41 @@ sub overlap_exists {
 	my @predictions_to_add;
 	if( not exists $a->{'used'} ){
 		foreach my $prediction (@$b){
-			if($a->{'start'}<=$prediction->{'start'} and $a->{'end'}>=$prediction->{'end'}){
-				# Prediction entirely contained within a
-				$found_overlap = 1;
-				$prediction->{'used'} = 1;
-			} elsif ($a->{'start'}<=$prediction->{'start'} and $a->{'end'}>=$prediction->{'start'}){
-				#Prediction overhangs right side of a
-				$found_overlap = 1;
-				if($prediction->{'end'}-$a->{'end'}>=$params{'overhang_threshold'}){
-					push @predictions_to_add, {'start'=>$a->{'end'}+1,'end'=>$prediction->{'end'}};
-					$prediction->{'end'} = $a->{'end'};
+			if(not (exists $prediction->{'used'} and $prediction->{'used'} == 1) ){
+
+				if($a->{'start'}<=$prediction->{'start'} and $a->{'end'}>=$prediction->{'end'}){
+					# Prediction entirely contained within a
+					$found_overlap = 1;
+					$prediction->{'used'} = 1;
+				} elsif ($a->{'start'}<=$prediction->{'start'} and $a->{'end'}>=$prediction->{'start'}){
+					#Prediction overhangs right side of a
+					$found_overlap = 1;
+					if($prediction->{'end'}-$a->{'end'}>=$params{'overhang_threshold'}){
+						push @predictions_to_add, {'start'=>$a->{'end'}+1,'end'=>$prediction->{'end'}};
+						$prediction->{'end'} = $a->{'end'};
+					}
+					$prediction->{'used'} = 1;
+				} elsif ($a->{'start'}<=$prediction->{'end'} and $a->{'end'}>=$prediction->{'end'}){
+					# Prediction overhangs left side of a
+					$found_overlap = 1;
+					if($a->{'start'}-$prediction->{'start'}>=$params{'overhang_threshold'}){
+						push @predictions_to_add, {'start'=>$prediction->{'start'},'end'=>$a->{'start'}-1};
+						$prediction->{'start'} = $a->{'start'};
+					}
+					$prediction->{'used'} = 1;
+				} elsif ($a->{'start'}>$prediction->{'start'} and $a->{'end'}<$prediction->{'end'}){
+					# Prediction overhangs a on both sides
+					$found_overlap = 1;
+					if($a->{'start'}-$prediction->{'start'}>=$params{'overhang_threshold'}){
+						push @predictions_to_add, {'start'=>$prediction->{'start'},'end'=>$a->{'start'}-1};
+						$prediction->{'start'} = $a->{'start'};
+					}
+					if($prediction->{'end'}-$a->{'end'}>=$params{'overhang_threshold'}){
+						push @predictions_to_add, {'start'=>$a->{'end'}+1,'end'=>$prediction->{'end'}};
+						$prediction->{'end'} = $a->{'end'};
+					}
+					$prediction->{'used'} = 1;
 				}
-				$prediction->{'used'} = 1;
-			} elsif ($a->{'start'}<=$prediction->{'end'} and $a->{'end'}>=$prediction->{'end'}){
-				# Prediction overhangs left side of a
-				$found_overlap = 1;
-				if($a->{'start'}-$prediction->{'start'}>=$params{'overhang_threshold'}){
-					push @predictions_to_add, {'start'=>$prediction->{'start'},'end'=>$a->{'start'}-1};
-					$prediction->{'start'} = $a->{'start'};
-				}
-				$prediction->{'used'} = 1;
-			} elsif ($a->{'start'}>$prediction->{'start'} and $a->{'end'}<$prediction->{'end'}){
-				# Prediction overhangs a on both sides
-				$found_overlap = 1;
-				if($a->{'start'}-$prediction->{'start'}>=$params{'overhang_threshold'}){
-					push @predictions_to_add, {'start'=>$prediction->{'start'},'end'=>$a->{'start'}-1};
-					$prediction->{'start'} = $a->{'start'};
-				}
-				if($prediction->{'end'}-$a->{'end'}>=$params{'overhang_threshold'}){
-					push @predictions_to_add, {'start'=>$a->{'end'}+1,'end'=>$prediction->{'end'}};
-					$prediction->{'end'} = $a->{'end'};
-				}
-				$prediction->{'used'} = 1;
 			}
 		}
 		push @{$b},@predictions_to_add;
@@ -532,7 +535,10 @@ sub bin_predictions {
 			for(my $i=0; $i<scalar(@{$methods}); $i++){
 				if($methods->[$i]{'extend'} == 0){
 					if(exists $predictions->{$prefix}{$methods->[$i]{'key'}}{$sequence}){
-						if(overlap_exists($merged_predictions->{$sequence}[$j],$predictions->{$prefix}{$methods->[$j]{'key'}}{$sequence}) == 1){
+						if($merged_predictions->{$sequence}[$j]{'start'} == 226506){
+							print Dumper($predictions->{$prefix}{$methods->[$i]{'key'}}{$sequence});
+						}
+						if(overlap_exists($merged_predictions->{$sequence}[$j],$predictions->{$prefix}{$methods->[$i]{'key'}}{$sequence}) == 1){
 							push @{$merged_predictions->{$sequence}[$j]{'methods'}},$methods->[$i]{'abbr'};
 						}
 					}
@@ -590,6 +596,49 @@ sub bin_predictions {
 	return \@binned_predictions;
 }
 
+sub apply_mask {
+	my $predictions = shift;
+	my $prefix = shift;
+	my $masks = shift;
+
+	if(exists $masks->{$prefix}){
+		print VH_helpers->current_time()."\t\tApplying mask... ";
+		foreach my $sequence ( keys %{$masks->{$prefix}} ){
+			foreach my $mask ( @{$masks->{$prefix}{$sequence}} ){
+				foreach my $method ( keys %{$predictions->{$prefix}} ){
+					if(exists $predictions->{$prefix}{$method}{$sequence}){
+						my @predictions_to_add;
+						foreach my $prediction (@{$predictions->{$prefix}{$method}{$sequence}}){
+							if($mask->{'start'}<=$prediction->{'start'} and $mask->{'end'}>=$prediction->{'end'}){
+								# Prediction entirely contained within mask; set to ignore prediction
+								$prediction->{'start'} = -1; # Ignoring is _much_ easier than removing from the array
+								$prediction->{'end'} = -1;
+								$prediction->{'masked'} = 1;
+							} elsif ($mask->{'start'}<=$prediction->{'start'} and $mask->{'end'}>=$prediction->{'start'}) {
+								# Prediction's left side overlaps mask; trim left side
+								$prediction->{'start'} = $mask->{'end'}+1;
+							} elsif ($mask->{'start'}<=$prediction->{'end'} and $mask->{'end'}>=$prediction->{'end'}) {
+								# Prediction's right side overlaps mask; trim right side
+								$prediction->{'end'} = $mask->{'start'}-1;
+							} elsif ($mask->{'start'}>$prediction->{'start'} and $mask->{'end'}<$prediction->{'end'} and not exists $prediction->{'used'}) {
+								# Prediction contains a masked area within it; set to ignore prediction
+								$prediction->{'start'} = -1; # Ignoring is _much_ easier than removing from the array
+								$prediction->{'end'} = -1;
+								$prediction->{'masked'} = 1;
+								# Prediction contains a masked area within it; split into two predictions. Don't split ignored predictions.
+								# push @predictions_to_add, {'start'=>$mask->{'end'}+1,'end'=>$prediction->{'end'}};
+								# $prediction->{'end'} = $mask->{'start'}-1;
+							}
+						}
+						push @{$predictions->{$prefix}{$method}{$sequence}}, @predictions_to_add;
+					}
+				}
+			}
+		}
+		print "Done.\n";
+	}
+}
+
 print VH_helpers->current_time()."Processing output\n";
 my %predictions;
 my %merged_predictions;
@@ -635,40 +684,7 @@ foreach my $prefix (@valid_prefixes){
 	}
 
 	#Apply masking file
-	if(exists $masks{$prefix}){
-		print VH_helpers->current_time()."\t\tApplying mask... ";
-		foreach my $sequence ( keys %{$masks{$prefix}} ){
-			foreach my $mask ( @{$masks{$prefix}{$sequence}} ){
-				foreach my $method ( keys %{$predictions{$prefix}} ){
-					if(exists $predictions{$prefix}{$method}{$sequence}){
-						my @predictions_to_add;
-						foreach my $prediction (@{$predictions{$prefix}{$method}{$sequence}}){
-							if($mask->{'start'}<=$prediction->{'start'} and $mask->{'end'}>=$prediction->{'end'}){
-								# Prediction entirely contained within mask; set to ignore prediction
-								$prediction->{'start'} = -1; # Ignoring is _much_ easier than removing from the array
-								$prediction->{'end'} = -1;
-							} elsif ($mask->{'start'}<=$prediction->{'start'} and $mask->{'end'}>=$prediction->{'start'}) {
-								# Prediction's left side overlaps mask; trim left side
-								$prediction->{'start'} = $mask->{'end'}+1;
-							} elsif ($mask->{'start'}<=$prediction->{'end'} and $mask->{'end'}>=$prediction->{'end'}) {
-								# Prediction's right side overlaps mask; trim right side
-								$prediction->{'end'} = $mask->{'start'}-1;
-							} elsif ($mask->{'start'}>$prediction->{'start'} and $mask->{'end'}<$prediction->{'end'} and not exists $prediction->{'used'}) {
-								# Prediction contains a masked area within it; set to ignore prediction
-								$prediction->{'start'} = -1; # Ignoring is _much_ easier than removing from the array
-								$prediction->{'end'} = -1;
-								# Prediction contains a masked area within it; split into two predictions. Don't split ignored predictions.
-								# push @predictions_to_add, {'start'=>$mask->{'end'}+1,'end'=>$prediction->{'end'}};
-								# $prediction->{'end'} = $mask->{'start'}-1;
-							}
-						}
-						push @{$predictions{$prefix}{$method}{$sequence}}, @predictions_to_add;
-					}
-				}
-			}
-		}
-		print "Done.\n";
-	}
+	apply_mask(\%predictions,$prefix,\%masks);
 
 	#Merge results
 	print VH_helpers->current_time()."\t\tMerging predictions... ";
@@ -698,20 +714,41 @@ print "\n";
 
 ### STEP 5. RE-SCREEN PREDICTIONS AGAINST OTHER GENOMES FOR MISSED ELEMENTS ###
 my $reblast_predictions = VH_ReBlast->run(\%params,\@valid_prefixes,\%binned_predictions,\%masks,\%contigs);
+# Re-orocess all results
 print VH_helpers::current_time()." Final merge...\n";
 foreach my $prefix (@valid_prefixes){
-	print VH_helpers::current_time()."\t$prefix... ";
-	# unset 'used' on all predictions
-	foreach my $method (keys %{$predictions{$prefix}}){
-		foreach my $sequence (keys %{$predictions{$prefix}{$method}}){
-			foreach my $prediction (@{$predictions{$prefix}{$method}{$sequence}}){
-				if($prediction->{'start'}>0 and $prediction->{'end'}>0){
-					delete $prediction->{'used'};
-				}
-			}
-		}
+	print VH_helpers::current_time()."\t$prefix... \n";
+
+	#Process VirSorter output
+	print VH_helpers->current_time()."\t\tParsing VirSorter output... ";
+	$predictions{$prefix}{'virsorter'} = VH_VirSorter->get_predictions(\%params,$prefix);
+	print "Done.\n";
+	#Process PhiSpy output
+	print VH_helpers->current_time()."\t\tParsing PhiSpy output... ";
+	$predictions{$prefix}{'phispy'} = VH_PhiSpy->get_predictions(\%params,$prefix);
+	print "Done.\n";
+	#Process CRISPR output
+	if($ran_crispr == 1){
+		print VH_helpers->current_time()."\t\tParsing CRISPR output... ";
+		$predictions{$prefix}{'crispr'} = VH_CRISPR->get_predictions(\%params,$prefix);
+		print "Done.\n";
 	}
+	#Process AGEnt output
+	print VH_helpers->current_time()."\t\tParsing Agent output... ";
+	$predictions{$prefix}{'agent'} = VH_SpineAgent->get_predictions(\%params,$prefix);
+	print "Done.\n";
+	#Process Known Types Blast output
+	if($ran_known_types == 1){
+		print VH_helpers->current_time()."\t\tParsing Known Types output... ";
+		$predictions{$prefix}{'blast'} = VH_Blast->get_predictions(\%params,$prefix);
+		print "Done.\n";
+	}
+
+	#Apply masking file
+	apply_mask(\%predictions,$prefix,\%masks);
+
 	# Merge again
+	print VH_helpers->current_time()."\t\tMerging predictions... ";
 	my %mergeable_predictions;
 	# Dump mergeable predictions into one array
 	for(my$i=0; $i<scalar(@methods); $i++){
@@ -734,8 +771,10 @@ foreach my $prefix (@valid_prefixes){
 		}
 	}
 	my %merged_predictions = merge_predictions(\%mergeable_predictions);
+	print "Done.\n";
 
 	# Bin again
+	print VH_helpers->current_time()."\t\tCross-referencing predictions... ";
 	$binned_predictions{$prefix} = bin_predictions(\%merged_predictions,\%predictions,$prefix,\@methods);
 	# push @{$binned_predictions{$prefix}[2]}, @{$reblast_predictions->{$prefix}};
 	print "Done.\n";
@@ -773,9 +812,4 @@ foreach my $prefix (@valid_prefixes){
 print "\n";
 
 ### STEP 6. COMPARE/CLUSTER PREDICTIONS ###
-# TODO this shouldnt be known viral types
-# if($params{"known_viral_types"} eq ""){
-# 	print VH_helpers->current_time()."No phage database given. Skipping clustering.\n";
-# } else {
-	VH_Cluster->run(\%params,\@valid_prefixes,\%binned_predictions);
-# }
+VH_Cluster->run(\%params,\@valid_prefixes,\%binned_predictions);
