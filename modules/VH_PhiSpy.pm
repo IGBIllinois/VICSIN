@@ -13,10 +13,8 @@ sub run {
 	my $params = shift;
 	my $prefixes = shift;
 
-	print VH_helpers->current_time()."Starting PhiSpy runs...\n";
+	VH_helpers->log($params,"Starting PhiSpy runs...");
 	foreach(@$prefixes) {
-		print VH_helpers->current_time()."\t$_... ";
-
 		my $seed_file_name = $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$_";
 		my $phispy_dir_name = $params->{"output_path"}."/".PHISPY_DIR."/$_";
 
@@ -26,8 +24,9 @@ sub run {
 
 		# Check for lockfile to determine if phispy already complete
 		if (-f $tbl_file_name and not -f $lock_file_name) {
-			print "$_ PhiSpy already completed. Skipping.\n";
+			VH_helpers->log($params,"\t$_ PhiSpy already completed. Skipping.",1);
 		} else {
+			VH_helpers->log($params,"\tRunning PhiSpy for $_... ",1);
 			# Create a lockfile to signify that the CRISPR run is in progress
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
@@ -37,9 +36,8 @@ sub run {
 
 			VH_helpers::clean_folder($phispy_dir_name,[$tbl_file_name]);
 			if ($? == 0){
-				print "Done.\n";
 			} else {
-				print "PhiSpy returned an error.\n";
+				VH_helpers->log($params,"PhiSpy returned an error on $_.");
 			}
 		}
 	}
@@ -69,6 +67,7 @@ sub get_predictions {
 			my $current_prediction = scalar(@{$predictions{$seq_name}});
 			$predictions{$seq_name}[$current_prediction]{'start'} = $start;
 			$predictions{$seq_name}[$current_prediction]{'end'} = $end;
+			$predictions{$seq_name}[$current_prediction]{'phispy'} = [$current_prediction];
 		}
 	}
 	return \%predictions;

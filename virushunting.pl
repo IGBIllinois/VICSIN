@@ -71,6 +71,7 @@ use YAML qw(LoadFile);
 use File::Copy;
 use File::Path qw(make_path rmtree);
 use File::Spec;
+use Bio::SeqIO;
 
 #TODO only used for debugging; remove in production
 use Data::Dumper;
@@ -87,6 +88,7 @@ use VH_Blast;
 use VH_helpers;
 use VH_ReBlast;
 use VH_Cluster;
+use VH_Database;
 
 ### STEP 1: Parse arguments
 print `python -c "import Bio"`;
@@ -97,16 +99,13 @@ if($num_args<1 || $ARGV[0] =~ /^-/){
 	exit;
 }
 
-print VH_helpers->current_time()."Parsing arguments: \n";
 # We got at least one argument, the first one is the input text file
 my $input_file = $ARGV[0];
-print "\tInput file: $input_file\n";
 
 # If we got a second argument, it's the config file
 my $config_file = "";
 if($num_args>1 && $ARGV[1] =~ /^[^-]/){
 	$config_file = $ARGV[1];
-	print "\tConfig file: $config_file\n";
 }
 
 # The rest of the arguments
@@ -135,6 +134,7 @@ my %params = (
 	"phispy_windowsize"=>40,
 	"phispy_threshold"=>20,
 	"spine_percent_input"=>100,
+	"spine_max_distance"=>10,
 	"spine_agent_min_perc_id"=>85,
 	"spine_agent_min_size_core"=>10,
 	"spine_core_file"=>"",
@@ -155,7 +155,14 @@ my %params = (
 	"cluster_min_perc_length"=>0.8,
 	"cluster_min_length"=>100,
 	"cluster_min_bit_score"=>100.0,
-	"cluster_core_max_distance"=>10
+	"cluster_core_max_distance"=>10,
+	"use_database"=>'false',
+	"database_host"=>'',
+	"database_name"=>'',
+	"database_port"=>3306,
+	"database_user"=>'',
+	"database_pass"=>'',
+	"verbosity"=>0
 );
 
 # First, read in the config file, if provided
@@ -190,6 +197,7 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"phispy_windowsize=i"=>\$params{"phispy_windowsize"},
 			"phispy_threshold=i"=>\$params{"phispy_threshold"},
 			"spine_percent_input=i"=>\$params{"spine_percent_input"},
+			"spine_max_distance=i"=>\$params{"spine_max_distance"},
 			"spine_agent_min_perc_id=i"=>\$params{"spine_agent_min_perc_id"},
 			"spine_agent_min_size_core=i"=>\$params{"spine_agent_min_size_core"},
 			"spine_core_file=s"=>\$params{"spine_core_file"},
@@ -210,13 +218,23 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"cluster_min_perc_length=f"=>\$params{"cluster_min_perc_length"},
 			"cluster_min_length=i"=>\$params{"cluster_min_length"},
 			"cluster_min_bit_score=f"=>\$params{"cluster_min_bit_score"},
-			"cluster_core_max_distance=i"=>\$params{"cluster_core_max_distance"}
+			"cluster_core_max_distance=i"=>\$params{"cluster_core_max_distance"},
+			"use_database=s"=>\$params{"use_database"},
+			"database_host=s"=>\$params{"database_host"},
+			"database_name=s"=>\$params{"database_name"},
+			"database_port=i"=>\$params{"database_port"},
+			"database_user=s"=>\$params{"database_user"},
+			"database_pass=s"=>\$params{"database_pass"},
+			"verbosity=i"=>\$params{"verbosity"}
 			);
 
+VH_helpers->log(\%params,"Arguments:",1);
+VH_helpers->log(\%params,"\tInput file: $input_file",1);
+VH_helpers->log(\%params,"\tConfig file: $config_file",1);
+
 foreach my $k (sort keys %params) {
-	print "\t$k: $params{$k}\n";
+	VH_helpers->log(\%params,"\t$k: $params{$k}",1);
 }
-print "\n";
 
 ### STEP 2. READ input.txt
 
@@ -245,95 +263,159 @@ while (my $row = <$fh>) {
 
 # Test each file prefix for format
 make_path($params{"output_path"}."/".CONVERTED_INPUT_DIR);
-print VH_helpers->current_time()."Reading input files from $input_file...\n";
+VH_helpers->log(\%params,"Processing input files from $input_file...");
 my @valid_prefixes;
+my %genomes;
 my %contigs;
-foreach (@prefixes) {
-	print VH_helpers->current_time()."\t$_... ";
+foreach my $prefix (@prefixes) {
 	my $valid_prefix_found = 0;
-	# Skip if already done this step and running again
-	if ( -f $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna" and 
-		-d $params{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$_" ){
-		print "$_ already converted. Skipping.";
-		$valid_prefix_found = 1;
-		push @valid_prefixes, $_;
-	} elsif (my $gbk_file_name = file_of_type_exists($_,"gbk","gb")){
-		## Gbk. Generate fasta+seed
-		print "$gbk_file_name found. Converting... ";
-
+	my $parse_length = 0;
+	if (my $gbk_file_name = file_of_type_exists($prefix,"gbk","gb")){
 		$gbk_file_name = $params{"input_path"}."/$gbk_file_name";
-		my $seed_file_name = $params{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$_";
-		my $fasta_file_name = $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna";
-
-		# Convert gbk to seed
-		`python "$params{genbank_to_seed}" "$gbk_file_name" "$seed_file_name"`;
-		# Convert gbk to fasta
-		`$params{genbank_to_fasta} -i "$gbk_file_name" -m genbank -s whole -a accessions -o "$_.fna"`;
-		# Move fasta file into new directory
-		move $params{"input_path"}."/$_.fna", $fasta_file_name;
-		# TODO check formats of fasta definition lines
-		$valid_prefix_found = 1;
-		push @valid_prefixes, $_;
-		print "Done.";
-	} elsif ( (my $fasta_file_name = file_of_type_exists($_,"fna","fasta","fa")) && (my $gff_file_name = file_of_type_exists($_,"gff")) ) {
-		## Fasta+gff. Generate seed
-		print "$fasta_file_name and $gff_file_name found. Converting... ";
-
-		$fasta_file_name = $params{"input_path"}."/$fasta_file_name";
-		$gff_file_name = $params{"input_path"}."/$gff_file_name";
-		my $seed_file_name = $params{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$_";
-
-		# Run gff_to_seed to generate seed file
-		`$params{gff_to_seed} $gff_file_name $fasta_file_name $_`;
-		# Move seed output into new directory
-		rmtree($seed_file_name);
-		move "_SEED_$_", $seed_file_name or die "Could not copy _SEED_/$_";
-		# Copy fasta file into new directory
-		copy $fasta_file_name, $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna" or die "Could not copy $_.fna";
-		# TODO check formats of fasta definition lines
-		$valid_prefix_found = 1;
-		push @valid_prefixes, $_;
-		print "Done.";
-	} elsif (my $fasta_file_name = file_of_type_exists($_,"fna","fasta","fa")){
-		## Fasta only. Generate gff, then generate seed
-		print "$fasta_file_name found. Converting... ";
-
-		$fasta_file_name = $params{"input_path"}."/$fasta_file_name";
-		my $gff_file_name = $params{"input_path"}."/$_.gff";
-		my $seed_file_name = $params{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$_";
-		
-		# Run prodigal to generate gff file
-		my $prod_out = `$params{prodigal} -f gff -c -m -i $fasta_file_name -o $gff_file_name 2>&1`;
-		if ($? == 0) {
-			# Run gff_to_seed to generate seed file
-			`$params{gff_to_seed} $gff_file_name $fasta_file_name $_`;
-			# Move seed output into new directory
-			rmtree $seed_file_name;
-			move "_SEED_$_", $seed_file_name or die "Could not copy _SEED_/$_";
-			# Copy fasta file into new directory
-			copy $fasta_file_name, $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna" or die "Could not copy $_.fna";
-
-			# TODO check formats of fasta definition lines
-			push @valid_prefixes, $_;
+		# Skip if already done this step and running again
+		if ( -f $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$prefix.fna" and 
+			-d $params{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$prefix" ){
+			VH_helpers->log(\%params,"\t$prefix already converted. Skipping.",1);
 			$valid_prefix_found = 1;
-			print "Done."
+			push @valid_prefixes, $prefix;
 		} else {
-			print "Prodigal returned an error: $?. Skipping.";
-			# Prodigal creates the gff file *before* checking to see if the fasta file is valid.
-			#  So if it errors out, delete the empty gff file it creates.
-			unlink $gff_file_name;
-			# TODO save prodigal output to file
+			## Gbk. Generate fasta+seed
+			VH_helpers->log(\%params,"\t$gbk_file_name found. Converting... ",1);
+
+			my $seed_file_name = $params{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$prefix";
+			my $fasta_file_name = $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$prefix.fna";
+
+			# Convert gbk to seed
+			`python "$params{genbank_to_seed}" "$gbk_file_name" "$seed_file_name"`;
+			# Convert gbk to fasta
+			`$params{genbank_to_fasta} -i "$gbk_file_name" -m genbank -s whole -a accessions -o "$prefix.fna"`;
+			# Move fasta file into new directory
+			move $params{"input_path"}."/$prefix.fna", $fasta_file_name;
+			# TODO check formats of fasta definition lines
+			$valid_prefix_found = 1;
+			push @valid_prefixes, $prefix;
 		}
-		# TODO if cancelled halfway through prodigal run, empty/invalid gff file results
+		# TODO gather gbk metadata
+		my $gbkobj = Bio::SeqIO->new(-file => $gbk_file_name,
+									 -format => 'GenBank');
+		my $gbkseq = $gbkobj->next_seq;
+		my $gbkanno = $gbkseq->annotation;
+		my @dblinks = $gbkanno->get_Annotations('dblink');
+		my $gene_count = 0;
+
+		foreach my $feat ($gbkseq->get_SeqFeatures){
+			if($feat->primary_tag eq "source"){
+				for my $tag ($feat->get_all_tags){
+					if($tag eq "organism"){
+						my @vals = $feat->get_tag_values($tag);
+						$genomes{$prefix}{'organism'} = $vals[0];
+					}
+					if($tag eq "strain"){
+						my @vals = $feat->get_tag_values($tag);
+						$genomes{$prefix}{'strain'} = $vals[0];
+					}
+				}
+			}
+			if($feat->primary_tag eq "gene"){
+				$gene_count++;
+			}
+		}
+
+		$genomes{$prefix}{'name'} = $prefix;
+		$genomes{$prefix}{'version'} = $gbkseq->version();
+		$genomes{$prefix}{'format'} = 'genbank';
+		$genomes{$prefix}{'definition'} = $gbkseq->desc();
+		$genomes{$prefix}{'accession'} = $gbkseq->accession_number();
+		$genomes{$prefix}{'keywords'} = $gbkseq->keywords();
+		$genomes{$prefix}{'length'} = $gbkseq->length();
+		# TODO what to do with dblink?
+		$genomes{$prefix}{'genes'} = $gene_count;
+	} elsif ( (my $fasta_file_name = file_of_type_exists($prefix,"fna","fasta","fa")) && (my $gff_file_name = file_of_type_exists($prefix,"gff")) ) {
+		# Skip if already done this step and running again
+		if ( -f $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$prefix.fna" and 
+			-d $params{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$prefix" ){
+			VH_helpers->log(\%params,"\t$prefix already converted. Skipping.",1);
+			$parse_length = 1;
+			$valid_prefix_found = 1;
+			push @valid_prefixes, $prefix;
+		} else {
+			## Fasta+gff. Generate seed
+			VH_helpers->log(\%params,"\t$fasta_file_name and $gff_file_name found. Converting... ",1);
+
+			$fasta_file_name = $params{"input_path"}."/$fasta_file_name";
+			$gff_file_name = $params{"input_path"}."/$gff_file_name";
+			my $seed_file_name = $params{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$prefix";
+
+			# Run gff_to_seed to generate seed file
+			`$params{gff_to_seed} $gff_file_name $fasta_file_name $prefix`;
+			# Move seed output into new directory
+			rmtree($seed_file_name);
+			move "_SEED_$prefix", $seed_file_name or die "Could not copy _SEED_/$prefix";
+			# Copy fasta file into new directory
+			copy $fasta_file_name, $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$prefix.fna" or die "Could not copy $prefix.fna";
+			# TODO check formats of fasta definition lines
+			$valid_prefix_found = 1;
+			$parse_length = 1;
+			push @valid_prefixes, $prefix;
+		}
+
+		$genomes{$prefix}{'name'} = $prefix;
+		$genomes{$prefix}{'version'} = "";
+		$genomes{$prefix}{'format'} = 'fasta/gff';
+		$genomes{$prefix}{'genes'} = 0;
+	} elsif (my $fasta_file_name = file_of_type_exists($prefix,"fna","fasta","fa")){
+		# Skip if already done this step and running again
+		if ( -f $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$prefix.fna" and 
+			-d $params{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$prefix" ){
+			VH_helpers->log(\%params,"\t$prefix already converted. Skipping.",1);
+			$parse_length = 1;
+			$valid_prefix_found = 1;
+			push @valid_prefixes, $prefix;
+		} else {
+			## Fasta only. Generate gff, then generate seed
+			VH_helpers->log(\%params,"\t$fasta_file_name found. Converting... ",1);
+
+			$fasta_file_name = $params{"input_path"}."/$fasta_file_name";
+			my $gff_file_name = $params{"input_path"}."/$prefix.gff";
+			my $seed_file_name = $params{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$prefix";
+			
+			# Run prodigal to generate gff file
+			my $prod_out = `$params{prodigal} -f gff -c -m -i $fasta_file_name -o $gff_file_name 2>&1`;
+			if ($? == 0) {
+				# Run gff_to_seed to generate seed file
+				`$params{gff_to_seed} $gff_file_name $fasta_file_name $prefix`;
+				# Move seed output into new directory
+				rmtree $seed_file_name;
+				move "_SEED_$prefix", $seed_file_name or die "Could not copy _SEED_/$prefix";
+				# Copy fasta file into new directory
+				copy $fasta_file_name, $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$prefix.fna" or die "Could not copy $prefix.fna";
+
+				# TODO check formats of fasta definition lines
+				push @valid_prefixes, $prefix;
+				$valid_prefix_found = 1;
+				$parse_length = 1;
+			} else {
+				VH_helpers->log(\%params,"\tProdigal returned an error: $?. Skipping $prefix.");
+				# Prodigal creates the gff file *before* checking to see if the fasta file is valid.
+				#  So if it errors out, delete the empty gff file it creates.
+				unlink $gff_file_name;
+				# TODO save prodigal output to file
+			}
+			# TODO if cancelled halfway through prodigal run, empty/invalid gff file results
+		}
+		$genomes{$prefix}{'name'} = $prefix;
+		$genomes{$prefix}{'version'} = "";
+		$genomes{$prefix}{'format'} = 'fasta';
+		$genomes{$prefix}{'genes'} = 0;
 		
 	} else {
 		# No workable files found.
-		print "No genebank or fasta files found. Skipping.";
+		VH_helpers->log(\%params,"\tNo genebank or fasta files found for $prefix. Skipping.");
 	}
 	if($valid_prefix_found == 1){
 		# read fasta file to get sequence borders
-		my $fasta_file_name = $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna";
-		open(my $fastafh, '<', $fasta_file_name) or die "Could not open fasta file.";
+		my $fasta_file_name = $params{"output_path"}."/".CONVERTED_INPUT_DIR."/$prefix.fna";
+		open(my $fastafh, '<', $fasta_file_name) or die "Could not open fasta file: ".$fasta_file_name."\n";
 		my $sequence = "";
 		my $seqlength = 0;
 		my $seqstart = 1;
@@ -342,7 +424,7 @@ foreach (@prefixes) {
 			if(substr($row,0,1) eq '>'){
 				if($sequence ne ""){
 					# Save previous sequence
-					$contigs{$_}{$sequence} = {'start'=>$seqstart,'end'=>$seqstart+$seqlength-1,'length'=>$seqlength};
+					$contigs{$prefix}{$sequence} = {'start'=>$seqstart,'end'=>$seqstart+$seqlength-1,'length'=>$seqlength};
 					$seqstart = $seqstart + $seqlength;
 					$seqlength = 0;
 				}
@@ -352,16 +434,18 @@ foreach (@prefixes) {
 			}
 		}
 		# Save last sequence
-		$contigs{$_}{$sequence} = {'start'=>$seqstart,'end'=>$seqstart+$seqlength-1,'length'=>$seqlength};
+		$contigs{$prefix}{$sequence} = {'start'=>$seqstart,'end'=>$seqstart+$seqlength-1,'length'=>$seqlength};
+		if($parse_length == 1){
+			$genomes{$prefix}{'length'} = $seqstart+$seqlength;
+		}
+		$genomes{$prefix}{'scaffolds'} = scalar(keys %{$contigs{$prefix}});
 	}
-	print "\n";
 }
-print "\n";
 
 ### STEP 2B. Read Masking File ###
 my %masks;
 if($params{'masking_file'} ne '' and -f $params{'masking_file'}){
-	print VH_helpers->current_time()."Masking File Found. Parsing... ";
+	VH_helpers->log(\%params,"Masking File Found. Parsing... ",1);
 	open(my $masking_fh, '<', $params{'masking_file'});
 	while(my $row = <$masking_fh>){
 		chomp $row;
@@ -386,9 +470,7 @@ if($params{'masking_file'} ne '' and -f $params{'masking_file'}){
 			}
 		}
 	}
-	print "Done.\n";
 }
-print "\n";
 
 ### STEP 3A. Run VirSorter
 VH_VirSorter->run(\%params,\@valid_prefixes);
@@ -399,9 +481,9 @@ VH_PhiSpy->run(\%params,\@valid_prefixes);
 ### STEP 3C. Run CRISPR (optional)
 my $ran_crispr = 0;
 if ($params{"spacer_fasta_file"} eq ""){
-	print VH_helpers->current_time()."No spacer fasta file given. Skipping CRISPR match.\n\n";
+	VH_helpers->log(\%params,"No spacer fasta file given. Skipping CRISPR match.",1);
 } elsif (! -f $params{"spacer_fasta_file"}) {
-	print VH_helpers->current_time()."Spacer file not found. Skipping CRISPR match.\n\n";
+	VH_helpers->log(\%params,"Spacer file not found. Skipping CRISPR match.");
 } else {
 	$ran_crispr = 1;
 	VH_CRISPR->run(\%params,\@valid_prefixes);
@@ -413,7 +495,7 @@ VH_SpineAgent->run(\%params,\@valid_prefixes);
 ### STEP 3E. Run Blastn (optional)
 my $ran_known_types = 0;
 if ($params{"known_viral_types"} eq ""){
-	print VH_helpers->current_time()."Known viral types not given. Skipping.\n\n";
+	VH_helpers->log(\%params,"Known viral types not given. Skipping.",1);
 } else {
 	$ran_known_types = 1;
 	VH_Blast->run(\%params,\@valid_prefixes);
@@ -423,21 +505,24 @@ if ($params{"known_viral_types"} eq ""){
 
 # Finds overlaps between prediction a and list of predictions b; trims overhanging edges in b
 sub overlap_exists {
-	my ($a,$b) = @_;
+	my ($a,$b,$methods) = @_;
 	
 	my $found_overlap = 0;
 	my @predictions_to_add;
 	if( not exists $a->{'used'} ){
 		foreach my $prediction (@$b){
+			my $this_prediction_hit = 0;
 			if(not (exists $prediction->{'used'} and $prediction->{'used'} == 1) ){
 
 				if($a->{'start'}<=$prediction->{'start'} and $a->{'end'}>=$prediction->{'end'}){
 					# Prediction entirely contained within a
 					$found_overlap = 1;
+					$this_prediction_hit = 1;
 					$prediction->{'used'} = 1;
 				} elsif ($a->{'start'}<=$prediction->{'start'} and $a->{'end'}>=$prediction->{'start'}){
 					#Prediction overhangs right side of a
 					$found_overlap = 1;
+					$this_prediction_hit = 1;
 					if($prediction->{'end'}-$a->{'end'}>=$params{'overhang_threshold'}){
 						push @predictions_to_add, {'start'=>$a->{'end'}+1,'end'=>$prediction->{'end'}};
 						$prediction->{'end'} = $a->{'end'};
@@ -446,6 +531,7 @@ sub overlap_exists {
 				} elsif ($a->{'start'}<=$prediction->{'end'} and $a->{'end'}>=$prediction->{'end'}){
 					# Prediction overhangs left side of a
 					$found_overlap = 1;
+					$this_prediction_hit = 1;
 					if($a->{'start'}-$prediction->{'start'}>=$params{'overhang_threshold'}){
 						push @predictions_to_add, {'start'=>$prediction->{'start'},'end'=>$a->{'start'}-1};
 						$prediction->{'start'} = $a->{'start'};
@@ -454,6 +540,7 @@ sub overlap_exists {
 				} elsif ($a->{'start'}>$prediction->{'start'} and $a->{'end'}<$prediction->{'end'}){
 					# Prediction overhangs a on both sides
 					$found_overlap = 1;
+					$this_prediction_hit = 1;
 					if($a->{'start'}-$prediction->{'start'}>=$params{'overhang_threshold'}){
 						push @predictions_to_add, {'start'=>$prediction->{'start'},'end'=>$a->{'start'}-1};
 						$prediction->{'start'} = $a->{'start'};
@@ -463,6 +550,17 @@ sub overlap_exists {
 						$prediction->{'end'} = $a->{'end'};
 					}
 					$prediction->{'used'} = 1;
+				}
+			}
+			if($this_prediction_hit == 1){
+				# Keep track of which hits are incorporated here
+				foreach my $method (@{$methods}){
+					if(exists $prediction->{$method->{'key'}}){
+						if(not exists $a->{$method->{'key'}}){
+							$a->{$method->{'key'}} = [];
+						}
+						push @{$a->{$method->{'key'}}}, @{$prediction->{$method->{'key'}}};
+					}
 				}
 			}
 		}
@@ -475,13 +573,13 @@ sub overlap_exists {
 # TODO ignore masked-out predictions
 sub merge_predictions {
 	my $mergeable_predictions = shift;
+	my $methods = shift;
 
 	# Merge until there ain't no more to merge
 	my $found_merges;
 	my %merged_predictions;
 	foreach my $sequence (keys %{$mergeable_predictions}){
 		do {
-			# print Dumper($mergeable_predictions{$sequence});
 			$merged_predictions{$sequence} = [];
 			$found_merges = 0;
 			for (my $i = 0; $i < scalar(@{$mergeable_predictions->{$sequence}}); $i++){
@@ -500,10 +598,20 @@ sub merge_predictions {
 						if($mergeable_predictions->{$sequence}[$i]{'end'}>$merged_predictions{$sequence}[$j]{'end'}){
 							$merged_predictions{$sequence}[$j]{'end'} = $mergeable_predictions->{$sequence}[$i]{'end'};
 						}
-						# TODO merge methods string intelligently
+						# merge methods string
 						foreach my $method (@{$mergeable_predictions->{$sequence}[$i]{'methods'}}){
 							if(not grep(/^$method$/,@{$merged_predictions{$sequence}[$j]{'methods'}})){
 								push @{$merged_predictions{$sequence}[$j]{'methods'}}, $method;
+							}
+						}
+
+						# Keep track of which hits are incorporated here
+						foreach my $method (@{$methods}){
+							if(exists $mergeable_predictions->{$sequence}[$i]{$method->{'key'}}){
+								if(not exists $merged_predictions{$sequence}[$j]{$method->{'key'}}){
+									$merged_predictions{$sequence}[$j]{$method->{'key'}} = [];
+								}
+								push @{$merged_predictions{$sequence}[$j]{$method->{'key'}}}, @{$mergeable_predictions->{$sequence}[$i]{$method->{'key'}}};
 							}
 						}
 					}
@@ -535,10 +643,7 @@ sub bin_predictions {
 			for(my $i=0; $i<scalar(@{$methods}); $i++){
 				if($methods->[$i]{'extend'} == 0){
 					if(exists $predictions->{$prefix}{$methods->[$i]{'key'}}{$sequence}){
-						if($merged_predictions->{$sequence}[$j]{'start'} == 226506){
-							print Dumper($predictions->{$prefix}{$methods->[$i]{'key'}}{$sequence});
-						}
-						if(overlap_exists($merged_predictions->{$sequence}[$j],$predictions->{$prefix}{$methods->[$i]{'key'}}{$sequence}) == 1){
+						if(overlap_exists($merged_predictions->{$sequence}[$j],$predictions->{$prefix}{$methods->[$i]{'key'}}{$sequence},$methods) == 1){
 							push @{$merged_predictions->{$sequence}[$j]{'methods'}},$methods->[$i]{'abbr'};
 						}
 					}
@@ -556,7 +661,14 @@ sub bin_predictions {
 					}
 				}
 			}
-			push @{$binned_predictions[$bin]}, {'sequence'=>$sequence,'methods'=>join(',',@{$merged_predictions->{$sequence}[$j]{'methods'}}),'start'=>$merged_predictions->{$sequence}[$j]{'start'},'end'=>$merged_predictions->{$sequence}[$j]{'end'}};
+
+			my %final_prediction = ('sequence'=>$sequence,'methods'=>join(',',@{$merged_predictions->{$sequence}[$j]{'methods'}}),'start'=>$merged_predictions->{$sequence}[$j]{'start'},'end'=>$merged_predictions->{$sequence}[$j]{'end'});
+			foreach my $method (@{$methods}){
+				if(exists $merged_predictions->{$sequence}[$j]{$method->{'key'}}){
+					$final_prediction{$method->{'key'}} = $merged_predictions->{$sequence}[$j]{$method->{'key'}};
+				}
+			}
+			push @{$binned_predictions[$bin]}, \%final_prediction;
 		}
 	}
 
@@ -571,7 +683,7 @@ sub bin_predictions {
 						for(my $j=$i+1; $j<scalar @{$methods}; $j++){
 							if($methods->[$j]{'extend'}==0){
 								if(exists $predictions->{$prefix}{$methods->[$j]{'key'}}{$sequence}){
-									if(overlap_exists($prediction,$predictions->{$prefix}{$methods->[$j]{'key'}}{$sequence}) == 1){
+									if(overlap_exists($prediction,$predictions->{$prefix}{$methods->[$j]{'key'}}{$sequence},$methods) == 1){
 										$matches++;
 										$used_methods .= ",".$methods->[$j]{'abbr'};
 									}
@@ -586,7 +698,14 @@ sub bin_predictions {
 						} elsif($matches == 1){
 							$bin = $methods->[$i]{'bin'};
 						}
-						push @{$binned_predictions[$bin]}, {'sequence'=>$sequence,'methods'=>$used_methods,'start'=>$prediction->{'start'},'end'=>$prediction->{'end'}};
+
+						my %final_prediction = ('sequence'=>$sequence,'methods'=>$used_methods,'start'=>$prediction->{'start'},'end'=>$prediction->{'end'});
+						foreach my $method (@{$methods}){
+							if(exists $prediction->{$method->{'key'}}){
+								$final_prediction{$method->{'key'}} = $prediction->{$method->{'key'}};
+							}
+						}
+						push @{$binned_predictions[$bin]}, \%final_prediction;
 					}
 				}
 			}
@@ -602,7 +721,7 @@ sub apply_mask {
 	my $masks = shift;
 
 	if(exists $masks->{$prefix}){
-		print VH_helpers->current_time()."\t\tApplying mask... ";
+		VH_helpers->log(\%params,"\t\tApplying mask... ",1);
 		foreach my $sequence ( keys %{$masks->{$prefix}} ){
 			foreach my $mask ( @{$masks->{$prefix}{$sequence}} ){
 				foreach my $method ( keys %{$predictions->{$prefix}} ){
@@ -635,11 +754,10 @@ sub apply_mask {
 				}
 			}
 		}
-		print "Done.\n";
 	}
 }
 
-print VH_helpers->current_time()."Processing output\n";
+VH_helpers->log(\%params,"Processing output");
 my %predictions;
 my %merged_predictions;
 my %binned_predictions;
@@ -657,37 +775,32 @@ if($ran_crispr){
 push @methods, {'key'=>'reblast','abbr'=>'R','bin'=>2,'extend'=>1};
 
 foreach my $prefix (@valid_prefixes){
-	print VH_helpers->current_time()."\tProcessing $prefix...\n";
+	VH_helpers->log(\%params,"\tProcessing $prefix...",1);
 	#Process VirSorter output
-	print VH_helpers->current_time()."\t\tParsing VirSorter output... ";
+	VH_helpers->log(\%params,"\t\tParsing VirSorter output... ",2);
 	$predictions{$prefix}{'virsorter'} = VH_VirSorter->get_predictions(\%params,$prefix);
-	print "Done.\n";
 	#Process PhiSpy output
-	print VH_helpers->current_time()."\t\tParsing PhiSpy output... ";
+	VH_helpers->log(\%params,"\t\tParsing PhiSpy output... ",2);
 	$predictions{$prefix}{'phispy'} = VH_PhiSpy->get_predictions(\%params,$prefix);
-	print "Done.\n";
 	#Process CRISPR output
 	if($ran_crispr == 1){
-		print VH_helpers->current_time()."\t\tParsing CRISPR output... ";
+		VH_helpers->log(\%params,"\t\tParsing CRISPR output... ",2);
 		$predictions{$prefix}{'crispr'} = VH_CRISPR->get_predictions(\%params,$prefix);
-		print "Done.\n";
 	}
 	#Process AGEnt output
-	print VH_helpers->current_time()."\t\tParsing Agent output... ";
+	VH_helpers->log(\%params,"\t\tParsing Agent output... ",2);
 	$predictions{$prefix}{'agent'} = VH_SpineAgent->get_predictions(\%params,$prefix);
-	print "Done.\n";
 	#Process Known Types Blast output
 	if($ran_known_types == 1){
-		print VH_helpers->current_time()."\t\tParsing Known Types output... ";
+		VH_helpers->log(\%params,"\t\tParsing Known Types output... ",2);
 		$predictions{$prefix}{'blast'} = VH_Blast->get_predictions(\%params,$prefix);
-		print "Done.\n";
 	}
 
 	#Apply masking file
 	apply_mask(\%predictions,$prefix,\%masks);
 
 	#Merge results
-	print VH_helpers->current_time()."\t\tMerging predictions... ";
+	VH_helpers->log(\%params,"\t\tMerging predictions... ",2);
 	my %mergeable_predictions;
 	# Dump mergeable predictions into one array
 	for(my$i=0; $i<scalar(@methods); $i++){
@@ -695,60 +808,55 @@ foreach my $prefix (@valid_prefixes){
 			foreach my $sequence (keys %{$predictions{$prefix}{$methods[$i]{'key'}}}){
 				my @predictions_to_add;
 				foreach my $prediction (@{$predictions{$prefix}{$methods[$i]{'key'}}{$sequence}}){
-					push @predictions_to_add, {"methods"=>[$methods[$i]{'abbr'}],"start"=>$prediction->{'start'},"end"=>$prediction->{'end'}};
+					$prediction->{'methods'} = [$methods[$i]{'abbr'}];
+					push @predictions_to_add, $prediction;
 				}
 				push @{$mergeable_predictions{$sequence}}, @predictions_to_add;
 			}
 		}
 	}
 	
-	my %merged_predictions = merge_predictions(\%mergeable_predictions);
-	print "Done.\n";
+	my %merged_predictions = merge_predictions(\%mergeable_predictions,\@methods);
 
 	#Compare results
-	print VH_helpers->current_time()."\t\tCross-referencing predictions... ";
+	VH_helpers->log(\%params,"\t\tCross-referencing predictions... ",2);
 	$binned_predictions{$prefix} = bin_predictions(\%merged_predictions,\%predictions,$prefix,\@methods);
-	print "Done.\n";
 }
 print "\n";
 
 ### STEP 5. RE-SCREEN PREDICTIONS AGAINST OTHER GENOMES FOR MISSED ELEMENTS ###
 my $reblast_predictions = VH_ReBlast->run(\%params,\@valid_prefixes,\%binned_predictions,\%masks,\%contigs);
+
 # Re-orocess all results
-print VH_helpers::current_time()." Final merge...\n";
+VH_helpers->log(\%params," Final merge...");
 foreach my $prefix (@valid_prefixes){
-	print VH_helpers::current_time()."\t$prefix... \n";
+	VH_helpers->log(\%params,"\tProcessing $prefix... ",1);
 
 	#Process VirSorter output
-	print VH_helpers->current_time()."\t\tParsing VirSorter output... ";
+	VH_helpers->log(\%params,"\t\tParsing VirSorter output... ",2);
 	$predictions{$prefix}{'virsorter'} = VH_VirSorter->get_predictions(\%params,$prefix);
-	print "Done.\n";
 	#Process PhiSpy output
-	print VH_helpers->current_time()."\t\tParsing PhiSpy output... ";
+	VH_helpers->log(\%params,"\t\tParsing PhiSpy output... ",2);
 	$predictions{$prefix}{'phispy'} = VH_PhiSpy->get_predictions(\%params,$prefix);
-	print "Done.\n";
 	#Process CRISPR output
 	if($ran_crispr == 1){
-		print VH_helpers->current_time()."\t\tParsing CRISPR output... ";
+		VH_helpers->log(\%params,"\t\tParsing CRISPR output... ",2);
 		$predictions{$prefix}{'crispr'} = VH_CRISPR->get_predictions(\%params,$prefix);
-		print "Done.\n";
 	}
 	#Process AGEnt output
-	print VH_helpers->current_time()."\t\tParsing Agent output... ";
+	VH_helpers->log(\%params,"\t\tParsing Agent output... ",2);
 	$predictions{$prefix}{'agent'} = VH_SpineAgent->get_predictions(\%params,$prefix);
-	print "Done.\n";
 	#Process Known Types Blast output
 	if($ran_known_types == 1){
-		print VH_helpers->current_time()."\t\tParsing Known Types output... ";
+		VH_helpers->log(\%params,"\t\tParsing Known Types output... ",2);
 		$predictions{$prefix}{'blast'} = VH_Blast->get_predictions(\%params,$prefix);
-		print "Done.\n";
 	}
 
 	#Apply masking file
 	apply_mask(\%predictions,$prefix,\%masks);
 
 	# Merge again
-	print VH_helpers->current_time()."\t\tMerging predictions... ";
+	VH_helpers->log(\%params,"\t\tMerging predictions... ",2);
 	my %mergeable_predictions;
 	# Dump mergeable predictions into one array
 	for(my$i=0; $i<scalar(@methods); $i++){
@@ -756,35 +864,32 @@ foreach my $prefix (@valid_prefixes){
 			foreach my $sequence (keys %{$predictions{$prefix}{$methods[$i]{'key'}}}){
 				my @predictions_to_add;
 				foreach my $prediction (@{$predictions{$prefix}{$methods[$i]{'key'}}{$sequence}}){
-					push @predictions_to_add, {"methods"=>[$methods[$i]{'abbr'}],"start"=>$prediction->{'start'},"end"=>$prediction->{'end'}};
+					$prediction->{'methods'} = [$methods[$i]{'abbr'}];
+					push @predictions_to_add, $prediction;
 				}
 				push @{$mergeable_predictions{$sequence}}, @predictions_to_add;
 			}
 		}
 	}
 	foreach my $prediction (@{$reblast_predictions->{$prefix}}){
-		if(not exists $prediction->{'masked'}){
-			if(not exists $mergeable_predictions{$prediction->{'sequence'}}){
-				$mergeable_predictions{$prediction->{'sequence'}} = [];
-			}
-			push @{$mergeable_predictions{$prediction->{'sequence'}}}, {'methods'=>['R'],'start'=>$prediction->{'start'},'end'=>$prediction->{'end'}};
+		if(not exists $mergeable_predictions{$prediction->{'sequence'}}){
+			$mergeable_predictions{$prediction->{'sequence'}} = [];
 		}
+		$prediction->{'methods'} = ['R'];
+		push @{$mergeable_predictions{$prediction->{'sequence'}}}, $prediction;
 	}
-	my %merged_predictions = merge_predictions(\%mergeable_predictions);
-	print "Done.\n";
+	my %merged_predictions = merge_predictions(\%mergeable_predictions,\@methods);
 
 	# Bin again
-	print VH_helpers->current_time()."\t\tCross-referencing predictions... ";
+	VH_helpers->log(\%params,"\t\tCross-referencing predictions... ",2);
 	$binned_predictions{$prefix} = bin_predictions(\%merged_predictions,\%predictions,$prefix,\@methods);
-	# push @{$binned_predictions{$prefix}[2]}, @{$reblast_predictions->{$prefix}};
-	print "Done.\n";
 }
 print "\n";
 
-print VH_helpers::current_time()."Saving Output...\n";
+VH_helpers->log(\%params,"Saving Output...");
 foreach my $prefix (@valid_prefixes){
 	#Output to file
-	print VH_helpers::current_time()."\t$prefix... ";
+	VH_helpers->log(\%params,"\tSaving $prefix... ",1);
 	sub output_bin {
 		my ($fh, $bin) = @_;
 		foreach my $prediction (@$bin){
@@ -807,9 +912,15 @@ foreach my $prefix (@valid_prefixes){
 	print $output_fh "# Type 5: Protospacer match\n# Sequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[4]);
 	close $output_fh;
-	print "Done.\n";
 }
 print "\n";
 
 ### STEP 6. COMPARE/CLUSTER PREDICTIONS ###
-VH_Cluster->run(\%params,\@valid_prefixes,\%binned_predictions);
+my $clusters = VH_Cluster->run(\%params,\@valid_prefixes,\%binned_predictions);
+
+### Finally, do database insertions ###
+if($params{'use_database'} eq 'true'){
+	VH_Database->insert(\%params, \@valid_prefixes, \%genomes, \%contigs, \%predictions, $reblast_predictions, \%binned_predictions, $clusters);
+}
+
+VH_helpers->log(\%params,"Done.");

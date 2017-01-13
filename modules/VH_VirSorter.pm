@@ -2,9 +2,11 @@
 
 package VH_VirSorter;
 
+use strict;
 use File::Path qw(make_path);
 use File::Copy qw(mv);
 use VH_helpers;
+use Data::Dumper;
 
 no define CONVERTED_INPUT_DIR =>;
 use constant VIRSORTER_DIR => "Virsorter_Runs";
@@ -14,10 +16,8 @@ sub run {
 	my $params = shift;
 	my $prefixes = shift;
 
-	print VH_helpers->current_time()."Starting VirSorter runs...\n";
+	VH_helpers->log($params,"Starting VirSorter runs...");
 	foreach(@$prefixes) {
-		print VH_helpers->current_time()."\t$_... ";
-
 		my $fasta_file_name =  File::Spec->rel2abs( $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna" );
 		my $wdir = $params->{"output_path"}."/".VIRSORTER_DIR."/$_";
 		my $data_dir = File::Spec->rel2abs( $params->{"virsorter_data_dir"} );
@@ -29,8 +29,9 @@ sub run {
 
 		# If the virsorter files exist but not the lock file, virsorter previously completed
 		if ( -f $csv_file_name and -f $mga_dest_file_name and not -f $lock_file_name ){ 
-			print "$_ VirSorter already completed. Skipping.\n";
+			VH_helpers->log($params,"\t$_ VirSorter already completed. Skipping.",1);
 		} else {
+			VH_helpers->log($params,"\tRunning VirSorter for $_... ",1);
 			make_path($wdir);
 			# Create a lockfile to signify that the VirSorter run is in progress
 			open(my $lockfh, '>', $lock_file_name);
@@ -43,8 +44,6 @@ sub run {
 			mv($mga_file_name,$mga_dest_file_name);
 			unlink($lock_file_name);
 			VH_helpers::clean_folder($wdir,[$csv_file_name,$mga_dest_file_name,$wdir."/log_out",$wdir."/log_err"]);
-
-			print "Done.\n";
 		}
 	}
 	print "\n";
@@ -63,7 +62,9 @@ sub get_predictions {
 	my %genefrags;
 	open my $csv_fh, '<', $csv_file_name;
 	while (my $csv_line = <$csv_fh>){
+		chomp $csv_line;
 		if($csv_line =~ m/^([^#>]+?),.*?,(.+?),(.+?),/){
+			my @csv_array = split ',', $csv_line;
 			my $sequence = $1;
 			my $fragment = $2;
 			my $fragsize = $3;
@@ -79,7 +80,16 @@ sub get_predictions {
 				$genes{$sequence}[$genefrags{$sequence}]{'start'} = 1;
 				$genes{$sequence}[$genefrags{$sequence}]{'end'} = $fragsize;
 			}
-			
+
+			$genes{$sequence}[$genefrags{$sequence}]{'category'} = 							$csv_array[4];
+			$genes{$sequence}[$genefrags{$sequence}]{'genes_predicted'} = 					$csv_array[3];
+			$genes{$sequence}[$genefrags{$sequence}]{'viral_hallmark_genes'} = 				$csv_array[5];
+			$genes{$sequence}[$genefrags{$sequence}]{'viral_gene_enrich'} = 				$csv_array[6];
+			$genes{$sequence}[$genefrags{$sequence}]{'noncaudovirales_gene_enrich'} = 		$csv_array[7];
+			$genes{$sequence}[$genefrags{$sequence}]{'pfam_depletion'} = 					$csv_array[8];
+			$genes{$sequence}[$genefrags{$sequence}]{'uncharacterized_gene_enrichment'} = 	$csv_array[9];
+			$genes{$sequence}[$genefrags{$sequence}]{'strand_switch_depletion'} = 			$csv_array[10];
+			$genes{$sequence}[$genefrags{$sequence}]{'short_gene_enrichment'} = 			$csv_array[11];
 		}
 	}
 
@@ -123,6 +133,17 @@ sub get_predictions {
 							#We're at the start of a fragment
 							$current_prediction = scalar(@{$predictions{$current_seqname}});
 							$predictions{$current_seqname}[$current_prediction]{'start'} = $start;
+
+							$predictions{$current_seqname}[$current_prediction]{'category'} = 							$frag->{'category'};
+							$predictions{$current_seqname}[$current_prediction]{'genes_predicted'} = 					$frag->{'genes_predicted'};
+							$predictions{$current_seqname}[$current_prediction]{'viral_hallmark_genes'} = 				$frag->{'viral_hallmark_genes'};
+							$predictions{$current_seqname}[$current_prediction]{'viral_gene_enrich'} = 					$frag->{'viral_gene_enrich'};
+							$predictions{$current_seqname}[$current_prediction]{'noncaudovirales_gene_enrich'} = 		$frag->{'noncaudovirales_gene_enrich'};
+							$predictions{$current_seqname}[$current_prediction]{'pfam_depletion'} = 					$frag->{'pfam_depletion'};
+							$predictions{$current_seqname}[$current_prediction]{'uncharacterized_gene_enrichment'} = 	$frag->{'uncharacterized_gene_enrichment'};
+							$predictions{$current_seqname}[$current_prediction]{'strand_switch_depletion'} = 			$frag->{'strand_switch_depletion'};
+							$predictions{$current_seqname}[$current_prediction]{'short_gene_enrichment'} = 				$frag->{'short_gene_enrichment'};
+							$predictions{$current_seqname}[$current_prediction]{'virsorter'} = 							[$current_prediction];
 						}
 						if ($gene eq $frag->{'end'}){
 							#We're at the end of a fragment

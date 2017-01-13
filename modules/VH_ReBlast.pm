@@ -19,14 +19,15 @@ sub run {
 	my $masks = shift;
 	my $contigs = shift;
 
+	my %raw_predictions;
 	my %return_predictions;
 
-	print VH_helpers->current_time()."Starting blastn against predictions...\n";
+	VH_helpers->log($params,"Starting blastn against predictions...");
 	make_path($params->{"output_path"}."/".REBLAST_DIR);
 	foreach my $curprefix (@$prefixes){
-		print VH_helpers->current_time()."\t$curprefix...\n";
+		VH_helpers->log($params,"\tRunning re-blast for $curprefix...",1);
 		# Generate fasta file with predictions to query against
-		print VH_helpers->current_time()."\t\tGenerating fasta file for re-blast... ";
+		VH_helpers->log($params,"\t\tGenerating fasta file for re-blast... ",2);
 		my $query_fasta_file_name = $params->{"output_path"}."/".REBLAST_DIR."/$curprefix-query.fna" or die "Could not truncate query file.";
 		open(my $queryfh, '>', $query_fasta_file_name);
 		my %query_lengths;
@@ -80,27 +81,26 @@ sub run {
 				}
 			}
 		}
-		print "Done.\n";
 
 		# Re-blast predictions against all prefixes
 		my $fasta_file_name = $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$curprefix.fna";
 		my $query_file_name = $params->{"output_path"}."/".REBLAST_DIR."/$curprefix-query.fna";
 		my $br_file_name = $params->{"output_path"}."/".REBLAST_DIR."/$curprefix.br";
 		# Run blastn
-		print VH_helpers->current_time()."\t\tRunning blastn... ";
+		VH_helpers->log($params,"\t\tRunning blastn... ",2);
 		`$params->{blastn} -query $query_file_name -subject $fasta_file_name -outfmt 6 -out $br_file_name`;
-		print "Done.\n";
 
 		# Delete fasta file (it's huge)
 		unlink($query_file_name);
 
 		# Parse Results
-		print VH_helpers->current_time()."\t\tParsing blast output... ";
+		VH_helpers->log($params,"\t\tParsing blast output... ",2);
 		my @blast_predictions;
 		open my $br_fh, '<', $br_file_name;
 		while(my $br_line = <$br_fh>){
 			chomp $br_line;
 			if ($br_line =~ m/^(.+?)\s(.+?)\s(.+?)\s.+?\s.+?\s.+?\s.+?\s.+?\s(.+?)\s(.+?)\s/m){
+				my @br_array = split "\t", $br_line;
 				my $query_seq = $1;
 				my $seq_name = $2;
 				my $perc_identity = $3;
@@ -113,17 +113,14 @@ sub run {
 					$start = $5;
 					$end = $4;
 				}
-				
 
-				push @blast_predictions, {'sequence'=>$seq_name,'methods'=>'R','start'=>$start,'end'=>$end,'query_seq'=>$query_seq,'perc_identity'=>$perc_identity};
+				push @blast_predictions, {'sequence'=>$seq_name,'methods'=>'R','start'=>$start,'end'=>$end,'query_seq'=>$query_seq,'perc_identity'=>$perc_identity, 'gap'=>$br_array[5], 'mismatch'=>$br_array[4], 'query_start'=>$br_array[6], 'query_stop'=>$br_array[7], 'bit'=>$br_array[11], 'evalue'=>$br_array[10]};
 			}
 		}
-		print scalar(@blast_predictions)." ";
-		print "Done.\n";
 
 		# Mask results w/ masking file
 		if(exists $masks->{$curprefix}){
-			print VH_helpers->current_time()."\t\tApplying mask file... ";
+			VH_helpers->log($params,"\t\tApplying mask file... ",2);
 			foreach my $sequence ( keys %{$masks->{$curprefix}} ){
 				foreach my $mask (@{$masks->{$curprefix}{$sequence}} ){
 					foreach my $prediction (@blast_predictions){
@@ -145,13 +142,11 @@ sub run {
 					}
 				}
 			}
-
-			print "Done.\n";
 		}
 
 
 		# Mask results w/ previous predictions
-		print VH_helpers->current_time()."\t\tMasking previous predictions... ";
+		VH_helpers->log($params,"\t\tMasking previous predictions... ",2);
 		foreach my $prefix ( @{$prefixes} ){
 			if($curprefix eq $prefix){
 				for (my $bin = 0; $bin < 4; $bin++) {
@@ -178,8 +173,6 @@ sub run {
 			}
 		}
 
-		print "Done.\n";
-
 		# Remove masked predictions from the list so the next step doesn't take quite so long
 		my @masked_predictions;
 		foreach my $prediction (@blast_predictions){
@@ -188,13 +181,11 @@ sub run {
 			}
 		}
 
-
 		# Combine overlapping results
-		print VH_helpers->current_time()."\t\tCombining results... ";
+		VH_helpers->log($params,"\t\tCombining results... ",2);
 		my $found_overlaps;
 		my @combined_predictions;
 		do {
-			print scalar(@masked_predictions)." ";
 			@combined_predictions = ();
 			$found_overlaps = 0;
 			for (my $i = 0; $i < scalar(@masked_predictions); $i++) {
@@ -223,28 +214,31 @@ sub run {
 			@masked_predictions = ();
 			push @masked_predictions,@combined_predictions;
 		} while ($found_overlaps == 1);
-		print scalar(@combined_predictions)." ";
-		print "Done.\n";
 
 		# Weed out results based on length
-		print VH_helpers->current_time()."\t\tExcluding based on length/% identity... ";
+		VH_helpers->log($params,"\t\tExcluding based on length/% identity... ",2);
+		my @final_predictions;
+		my $cur = 0;
 		foreach my $prediction (@combined_predictions){
 			# TODO implement new rules based on end-ness
 			if($prediction->{'start'} <= $params->{'reblast_edge_distance'} xor $prediction->{'end'}>=$contigs->{$curprefix}{$prediction->{'sequence'}}{'length'}-$params->{'reblast_edge_distance'}){
-				if($prediction->{'perc_identity'} < $params->{"reblast_min_perc_id"}){
+				if($prediction->{'perc_identity'} >= $params->{"reblast_min_perc_id"}){
 					# If hit touches either contig end (not both), min 90% ident
-					$prediction->{'masked'} = 1;
+					$prediction->{'reblast'} = [$cur];
+					@final_predictions[$cur] = $prediction;
+					$cur++;
 				}
 			} elsif ($prediction->{'start'}>$params->{'reblast_edge_distance'} and $prediction->{'end'}<$contigs->{$curprefix}{$prediction->{'sequence'}}{'length'}-$params->{'reblast_edge_distance'}){
-				if($prediction->{'perc_identity'}<$params->{"reblast_min_perc_id"} or $prediction->{'end'}-$prediction->{'start'}<($params->{"reblast_min_perc_length"}/100.0)*$query_lengths{$prediction->{'query_seq'}}){
+				if($prediction->{'perc_identity'}>=$params->{"reblast_min_perc_id"} and $prediction->{'end'}-$prediction->{'start'}>=($params->{"reblast_min_perc_length"}/100.0)*$query_lengths{$prediction->{'query_seq'}}){
 					# If hit touches neither contig end, min 90% ident, min 50% of query length
-					$prediction->{'masked'} = 1;
+					$prediction->{'reblast'} = [$cur];
+					@final_predictions[$cur] = $prediction;
+					$cur++;
 				}
 			}
 		}
-		print "Done.\n";
 
-		$return_predictions{$curprefix} = \@combined_predictions;
+		$return_predictions{$curprefix} = \@final_predictions;
 	}
 	print "\n";
 	return \%return_predictions;

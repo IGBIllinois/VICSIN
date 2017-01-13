@@ -21,13 +21,13 @@ sub run {
 	# If no spine core file is given (or found), run spine to generate one
 	# TODO If spine core file needs to be generated, we should regenerate it in case something has changed.
 	if ($params->{"spine_core_file"} ne ""){
-		print VH_helpers->current_time()."Spine core file given. Skipping spine.\n";
+		VH_helpers->log($params,"Spine core file given. Skipping spine.");
 		$core_file_given = 1;
 	# } elsif ($params->{"spine_core_file"} eq "" and not -f $params->{"output_path"}."/".SPINE_DIR."/spine_lock" and -f $params->{"output_path"}."/".SPINE_DIR."/output.backbone.fasta"){
 	# 	$params->{"spine_core_file"} = $params->{"output_path"}."/".SPINE_DIR."/output.backbone.fasta";
 	# 	print "\nSpine core file found. Skipping spine.\n";
 	} else {
-		print VH_helpers->current_time()."Starting Spine run... ";
+		VH_helpers->log($params,"Starting Spine run... ");
 		my $spine_input_file = "spine_input.txt";
 		my $lock_file_name = $params->{"output_path"}."/".SPINE_DIR."/spine_lock";
 		make_path($params->{"output_path"}."/".SPINE_DIR);
@@ -52,9 +52,8 @@ sub run {
 	}
 
 	# For each file:
-	print VH_helpers->current_time()."Starting AGEnt runs...\n";
+	VH_helpers->log($params,"Starting AGEnt runs...");
 	foreach(@$prefixes){
-		print VH_helpers->current_time()."\t$_... ";
 		my $fasta_file_name = File::Spec->rel2abs( $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna" );
 		my $core_file_name = File::Spec->rel2abs( $params->{"spine_core_file"} );
 		my $lock_file_name = $params->{"output_path"}."/".AGENT_DIR."/$_/${_}_agent_lock";
@@ -62,8 +61,9 @@ sub run {
 		make_path($wdir);
 
 		if( $core_file_given and -f $params->{"output_path"}."/".AGENT_DIR."/$_/AGENT_${_}_non-core.fasta" and not -f $lock_file_name){
-			print "$_ AGEnt already completed. Skipping.\n";
+			VH_helpers->log($params,"$_ AGEnt already completed. Skipping.",1);
 		} else {
+			VH_helpers->log($params,"\tRunning AGEnt for $_... ",1);
 			# Create a lockfile to signify that the AGEnt run is in progress
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
@@ -91,6 +91,7 @@ sub get_predictions {
 	while(my $agent_line = <$agent_fh>){
 		chomp $agent_line;
 		if ($agent_line =~ m/^.+?\s.+?\s.+?\s(.+?)\s(\d+?)\s([\d\?]+?)\s([\d\?]+?)$/){
+			my @agent_array = split "\t", $agent_line;
 			my $seq_name = $1;
 			my $seq_length = $2;
 			my $start = $3;
@@ -108,6 +109,8 @@ sub get_predictions {
 			my $current_prediction = scalar(@{$predictions{$seq_name}});
 			$predictions{$seq_name}[$current_prediction]{'start'} = $start;
 			$predictions{$seq_name}[$current_prediction]{'end'} = $end;
+			$predictions{$seq_name}[$current_prediction]{'gc'} = $agent_array[2];
+			$predictions{$seq_name}[$current_prediction]{'agent'} = [$current_prediction];
 		}
 	}
 	return \%predictions;

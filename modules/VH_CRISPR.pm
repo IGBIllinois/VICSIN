@@ -13,11 +13,9 @@ sub run {
 	my $params = shift;
 	my $prefixes = shift;
 
-	print VH_helpers->current_time()."Starting CRISPR runs...\n";
+	VH_helpers->log($params,"Starting CRISPR runs...");
 
 	foreach(@$prefixes) {
-		print VH_helpers->current_time()."\t$_...";
-
 		my $fasta_file_name = $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna";
 		my $crispr_file_name = $params->{"output_path"}."/".CRISPR_DIR."/${_}_CRISPR.br";
 		my $lock_file_name = $params->{'output_path'}.'/'.CRISPR_DIR."/${_}_CRISPR_lock";
@@ -25,8 +23,9 @@ sub run {
 
 		# If the crispr file exists but not the lock file, the CRISPR run was already complete
 		if (-f $crispr_file_name and not -f $lock_file_name){
-			print "$_ CRISPR already completed. Skipping.\n";
+			VH_helpers->log($params,"$_ CRISPR already completed. Skipping.",1);
 		} else {
+			VH_helpers->log($params,"\tRunning CRISPR blast for $_...",1);
 			# Create a lockfile to signify that the CRISPR run is in progress
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
@@ -35,7 +34,6 @@ sub run {
 			`$params->{blastn} -task "blastn-short" -subject $fasta_file_name -query $params->{spacer_fasta_file} -outfmt 6 -out $crispr_file_name`;
 
 			unlink $lock_file_name;
-			print "Done.\n";
 		}
 	}
 	print "\n";
@@ -53,6 +51,7 @@ sub get_predictions {
 	while(my $br_line = <$br_fh>){
 		chomp $br_line;
 		if ($br_line =~ m/^.+?\s(.+?)\s.+?\s.+?\s.+?\s.+?\s.+?\s.+?\s(.+?)\s(.+?)\s/){
+			my @br_array = split "\t", $br_line;
 			my $seq_name = $1;
 			my $start = $2;
 			my $end = $3;
@@ -64,6 +63,15 @@ sub get_predictions {
 			my $current_prediction = scalar(@{$predictions{$seq_name}});
 			$predictions{$seq_name}[$current_prediction]{'start'} = $start;
 			$predictions{$seq_name}[$current_prediction]{'end'} = $end;
+			$predictions{$seq_name}[$current_prediction]{'query'} = $br_array[0];
+			$predictions{$seq_name}[$current_prediction]{'perc_id'} = $br_array[2];
+			$predictions{$seq_name}[$current_prediction]{'gap'} = $br_array[5];
+			$predictions{$seq_name}[$current_prediction]{'mismatch'} = $br_array[4];
+			$predictions{$seq_name}[$current_prediction]{'query_start'} = $br_array[6];
+			$predictions{$seq_name}[$current_prediction]{'query_stop'} = $br_array[7];
+			$predictions{$seq_name}[$current_prediction]{'bit'} = $br_array[11];
+			$predictions{$seq_name}[$current_prediction]{'evalue'} = $br_array[10];
+			$predictions{$seq_name}[$current_prediction]{'crispr'} = [$current_prediction];
 		}
 	}
 	return \%predictions;
