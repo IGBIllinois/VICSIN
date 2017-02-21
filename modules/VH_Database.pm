@@ -18,7 +18,7 @@ sub insert {
 	my $binned_predictions = shift;
 	my $clusters = shift;
 
-	my $dbh = DBI->connect("DBI:mysql:database=".$params->{'database_name'}.";host=".$params->{'database_host'}.";port=".$params->{'accounting_port'}, $params->{'database_user'}, $params->{'database_pass'});
+	my $dbh = DBI->connect("DBI:mysql:database=".$params->{'database_name'}.";host=".$params->{'database_host'}.";port=".$params->{'database_port'}, $params->{'database_user'}, $params->{'database_pass'});
 
 	my $login = getpwuid($<) || "unknown";
 
