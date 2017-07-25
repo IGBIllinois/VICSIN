@@ -1,5 +1,9 @@
 #!/usr/bin/perl
 
+# Homology BLAST module for VICSIN Pipeline
+# Copyright 2017 University of Illinois at Urbana-Champaign
+# Author: Joe Leigh <jleigh@illinois.edu>
+
 package VH_Blast;
 
 use File::Path qw(make_path);
@@ -27,8 +31,12 @@ sub run {
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
 			close $lockfh;
+			
 			# Run blastn
-			`$params->{blastn} -query $params->{known_viral_types} -subject $fasta_file_name -outfmt 6 -out $output_file_name`;
+			my $blast_cmd = "$params->{blastn} -query $params->{known_viral_types} -subject $fasta_file_name -outfmt 6 -out $output_file_name";
+			VH_helpers->log($params, "\t\t$blast_cmd", 2);
+			`$blast_cmd`;
+
 			unlink $lock_file_name;
 		}
 	}

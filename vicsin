@@ -1,7 +1,9 @@
 #!/usr/bin/env perl
 $|++; # Forces stdout flush
 
-# Virus Hunting
+# VICSIN Pipeline
+# Copyright 2017 University of Illinois at Urbana-Champaign
+# Author: Joe Leigh <jleigh@illinois.edu>
 # Requirements:
 #  Prodigal
 #  PhiSpy
@@ -115,6 +117,7 @@ my %params = (
 	"output_path"=>".",
 	"genbank_to_seed"=>"genbank_to_seed.py",
 	"genbank_to_fasta"=>"genbank_to_fasta.py",
+	"core_genome"=>"core_genome.py",
 	"gff_to_seed"=>"gff_to_seed.pl",
 	"prodigal"=>"prodigal",
 	"virsorter"=>"wrapper_phage_contigs_sorter_iPlant.pl",
@@ -129,7 +132,6 @@ my %params = (
 	"mcl"=>"mcl",
 	"mcxdump"=>"mcxdump",
 	"blast_to_mcl"=>"Blast_to_MCL.1.py",
-	"core_genome_cluster_test"=>"core_genome_cluster_test.pl",
 	"mcldump2clusters"=>"MCLdump2clusters.pl",
 	"phispy_windowsize"=>40,
 	"phispy_threshold"=>20,
@@ -150,19 +152,22 @@ my %params = (
 	"reblast_min_perc_length"=>50,
 	"reblast_edge_distance"=>5,
 	"reblast_distance"=>5,
+	"reblast_min_contig_length"=>10000,
 	"cluster_core_congruence"=>0.66,
 	"percent_id_min_core"=>85,
-	"cluster_min_perc_length"=>0.8,
+	"cluster_min_perc_length"=>0.5,
 	"cluster_min_length"=>100,
 	"cluster_min_bit_score"=>100.0,
 	"cluster_core_max_distance"=>10,
+	"cluster_size_threshold"=>2000,
 	"use_database"=>'false',
 	"database_host"=>'',
 	"database_name"=>'',
 	"database_port"=>3306,
 	"database_user"=>'',
 	"database_pass"=>'',
-	"verbosity"=>0
+	"verbosity"=>0,
+	"num_threads"=>1
 );
 
 # First, read in the config file, if provided
@@ -178,6 +183,7 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"output_path=s"=>\$params{"output_path"},
 			"genbank_to_seed=s"=>\$params{"genbank_to_seed"},
 			"genbank_to_fasta=s"=>\$params{"genbank_to_fasta"},
+			"core_genome=s"=>\$params{"core_genome"},
 			"gff_to_seed=s"=>\$params{"gff_to_seed"},
 			"prodigal=s"=>\$params{"prodigal"},
 			"virsorter=s"=>\$params{"virsorter"},
@@ -192,7 +198,6 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"mcl=s"=>\$params{"mcl"},
 			"mcxdump=s"=>\$params{"mcxdump"},
 			"blast_to_mcl=s"=>\$params{"blast_to_mcl"},
-			"core_genome_cluster_test=s"=>\$params{"core_genome_cluster_test"},
 			"mcldump2clusters=s"=>\$params{"mcldump2clusters"},
 			"phispy_windowsize=i"=>\$params{"phispy_windowsize"},
 			"phispy_threshold=i"=>\$params{"phispy_threshold"},
@@ -213,19 +218,22 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"reblast_min_perc_length=i"=>\$params{"reblast_min_perc_length"},
 			"reblast_edge_distance=i"=>\$params{"reblast_edge_distance"},
 			"reblast_distance=i"=>\$params{"reblast_distance"},
+			"reblast_min_contig_length=i"=>\$params{"reblast_min_contig_length"},
 			"cluster_core_congruence=f"=>\$params{"cluster_core_congruence"},
 			"percent_id_min_core=i"=>\$params{"percent_id_min_core"},
 			"cluster_min_perc_length=f"=>\$params{"cluster_min_perc_length"},
 			"cluster_min_length=i"=>\$params{"cluster_min_length"},
 			"cluster_min_bit_score=f"=>\$params{"cluster_min_bit_score"},
 			"cluster_core_max_distance=i"=>\$params{"cluster_core_max_distance"},
+			"cluster_size_threshold=i"=>\$params{"cluster_size_threshold"},
 			"use_database=s"=>\$params{"use_database"},
 			"database_host=s"=>\$params{"database_host"},
 			"database_name=s"=>\$params{"database_name"},
 			"database_port=i"=>\$params{"database_port"},
 			"database_user=s"=>\$params{"database_user"},
 			"database_pass=s"=>\$params{"database_pass"},
-			"verbosity=i"=>\$params{"verbosity"}
+			"verbosity=i"=>\$params{"verbosity"},
+			"num_threads=i"=>\$params{"num_threads"}
 			);
 
 VH_helpers->log(\%params,"Arguments:",1);
@@ -637,8 +645,9 @@ sub bin_predictions {
 
 	my @binned_predictions = ([],[],[],[],[]);
 	# First pass: compare non-extending predictions with extending predictions
-	
+	my %predCount;
 	foreach my $sequence (keys %{$merged_predictions}){
+		$predCount{$sequence} = 0;
 		for (my $j = 0; $j < scalar(@{$merged_predictions->{$sequence}}); $j++){
 			for(my $i=0; $i<scalar(@{$methods}); $i++){
 				if($methods->[$i]{'extend'} == 0){
@@ -662,7 +671,8 @@ sub bin_predictions {
 				}
 			}
 
-			my %final_prediction = ('sequence'=>$sequence,'methods'=>join(',',@{$merged_predictions->{$sequence}[$j]{'methods'}}),'start'=>$merged_predictions->{$sequence}[$j]{'start'},'end'=>$merged_predictions->{$sequence}[$j]{'end'});
+			my %final_prediction = ('name'=>$prefix.'-'.$sequence.'-'.$predCount{$sequence},'sequence'=>$sequence,'methods'=>join(',',@{$merged_predictions->{$sequence}[$j]{'methods'}}),'start'=>$merged_predictions->{$sequence}[$j]{'start'},'end'=>$merged_predictions->{$sequence}[$j]{'end'});
+			$predCount{$sequence}++;
 			foreach my $method (@{$methods}){
 				if(exists $merged_predictions->{$sequence}[$j]{$method->{'key'}}){
 					$final_prediction{$method->{'key'}} = $merged_predictions->{$sequence}[$j]{$method->{'key'}};
@@ -699,7 +709,8 @@ sub bin_predictions {
 							$bin = $methods->[$i]{'bin'};
 						}
 
-						my %final_prediction = ('sequence'=>$sequence,'methods'=>$used_methods,'start'=>$prediction->{'start'},'end'=>$prediction->{'end'});
+						my %final_prediction = ('name'=>$prefix.'-'.$sequence.'-'.$predCount{$sequence},'sequence'=>$sequence,'methods'=>$used_methods,'start'=>$prediction->{'start'},'end'=>$prediction->{'end'});
+						$predCount{$sequence}++;
 						foreach my $method (@{$methods}){
 							if(exists $prediction->{$method->{'key'}}){
 								$final_prediction{$method->{'key'}} = $prediction->{$method->{'key'}};
@@ -772,7 +783,7 @@ if($ran_known_types){
 if($ran_crispr){
 	push @methods, {'key'=>'crispr','abbr'=>'C','bin'=>4,'extend'=>0};
 }
-push @methods, {'key'=>'reblast','abbr'=>'R','bin'=>2,'extend'=>1};
+push @methods, {'key'=>'reblast','abbr'=>'R','bin'=>2,'extend'=>0};
 
 foreach my $prefix (@valid_prefixes){
 	VH_helpers->log(\%params,"\tProcessing $prefix...",1);
@@ -894,22 +905,22 @@ foreach my $prefix (@valid_prefixes){
 		my ($fh, $bin) = @_;
 		foreach my $prediction (@$bin){
 			if(not exists $prediction->{'masked'}){
-				print $fh $prediction->{'sequence'}."\t".$prediction->{'methods'}."\t".$prediction->{'start'}."\t".$prediction->{'end'}."\n";
+				print $fh $prediction->{'name'}."\t".$prediction->{'sequence'}."\t".$prediction->{'methods'}."\t".$prediction->{'start'}."\t".$prediction->{'end'}."\n";
 			}
 		}
 	}
 	make_path($params{'output_path'}."/".OUTPUT_DIR);
 	my $output_file_name = $params{'output_path'}."/".OUTPUT_DIR."/$prefix.txt";
 	open my $output_fh, '>', $output_file_name;
-	print $output_fh "# Type 1: Predicted by >2 methods\n# Sequence\tmethods\tstart\tend\n";
+	print $output_fh "# Type 1: Predicted by >2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[0]);
-	print $output_fh "# Type 2: Predicted by 2 methods\n# Sequence\tmethods\tstart\tend\n";
+	print $output_fh "# Type 2: Predicted by 2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[1]);
-	print $output_fh "# Type 3: Predicted by 1 1° method\n# Sequence\tmethods\tstart\tend\n";
+	print $output_fh "# Type 3: Predicted by 1 1° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[2]);
-	print $output_fh "# Type 4: Predicted by 1 2° method\n# Sequence\tmethods\tstart\tend\n";
+	print $output_fh "# Type 4: Predicted by 1 2° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[3]);
-	print $output_fh "# Type 5: Protospacer match\n# Sequence\tmethods\tstart\tend\n";
+	print $output_fh "# Type 5: Protospacer match\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[4]);
 	close $output_fh;
 }

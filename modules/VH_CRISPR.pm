@@ -1,5 +1,9 @@
 #!/usr/bin/perl
 
+# CRISPR Match BLAST module for VICSIN Pipeline
+# Copyright 2017 University of Illinois at Urbana-Champaign
+# Author: Joe Leigh <jleigh@illinois.edu>
+
 package VH_CRISPR;
 
 use File::Path qw(make_path);
@@ -31,8 +35,10 @@ sub run {
 			say $lockfh "$$";
 			close $lockfh;
 
-			`$params->{blastn} -task "blastn-short" -subject $fasta_file_name -query $params->{spacer_fasta_file} -outfmt 6 -out $crispr_file_name`;
-
+			my $crispr_cmd = "$params->{blastn} -task \"blastn-short\" -subject $fasta_file_name -query $params->{spacer_fasta_file} -outfmt 6 -out $crispr_file_name";
+			VH_helpers->log($params, "\t\t$crispr_cmd", 2);
+			`$crispr_cmd`;
+			
 			unlink $lock_file_name;
 		}
 	}

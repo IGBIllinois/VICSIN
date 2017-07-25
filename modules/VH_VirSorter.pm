@@ -1,5 +1,9 @@
 #!/usr/bin/perl
 
+# VirSorter module for VICSIN Pipeline
+# Copyright 2017 University of Illinois at Urbana-Champaign
+# Author: Joe Leigh <jleigh@illinois.edu>
+
 package VH_VirSorter;
 
 use strict;
@@ -20,11 +24,11 @@ sub run {
 	foreach(@$prefixes) {
 		my $fasta_file_name =  File::Spec->rel2abs( $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna" );
 		my $wdir = $params->{"output_path"}."/".VIRSORTER_DIR."/$_";
-		my $data_dir = File::Spec->rel2abs( $params->{"virsorter_data_dir"} );
+		my $data_dir = $params->{"virsorter_data_dir"};
 
 		my $lock_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/${_}/${_}_VirSorter_lock";
 		my $csv_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/${_}/${_}_global-phage-signal.csv";
-		my $mga_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/${_}/Fasta_files/${_}_mga_final.predict";
+		my $mga_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/${_}/fasta/${_}_mga_final.predict";
 		my $mga_dest_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/${_}/${_}_mga_final.predict";
 
 		# If the virsorter files exist but not the lock file, virsorter previously completed
@@ -38,12 +42,14 @@ sub run {
 			say $lockfh "$$";
 			close $lockfh;
 
-			`cd $wdir; $params->{virsorter} -d $_ --fna $fasta_file_name --db $params->{virsorter_database} --data-dir $data_dir 2>&1; cd -`;
+			my $virsorter_cmd = "$params->{virsorter} -d $_ --fna $fasta_file_name --db $params->{virsorter_database} --data-dir $data_dir --ncpu $params->{num_threads} 2>&1";
+			VH_helpers->log($params,"\t\t$virsorter_cmd",2);
+			`cd $wdir; $virsorter_cmd; cd -`;
 			
 			# Move mga file to its final destination
 			mv($mga_file_name,$mga_dest_file_name);
 			unlink($lock_file_name);
-			VH_helpers::clean_folder($wdir,[$csv_file_name,$mga_dest_file_name,$wdir."/log_out",$wdir."/log_err"]);
+			VH_helpers->clean_folder($wdir,[$csv_file_name,$mga_dest_file_name,$wdir."/logs"]);
 		}
 	}
 	print "\n";
@@ -53,6 +59,25 @@ sub get_predictions {
 	shift;
 	my $params = shift;
 	my $prefix = shift;
+
+	# Workaround for VirSorter's renaming of all the sequences. Thanks, VirSorter.
+	my %unescapedSeqnames;
+
+	my $fasta_file_name = $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$prefix.fna";
+	open(my $fasta_fh, '<', $fasta_file_name);
+	while(my $row = <$fasta_fh>){
+		chomp $row;
+		if($row =~ /^>(.+)$/){
+			my $seqname = $1;
+			my $escapedname = $seqname =~ s/[\/\.,\|\s?!\*%]/_/rg;
+			# my $escapedname = $1;
+			$seqname =~ /^([^\s]*)\s/;
+			$seqname = $1;
+			$unescapedSeqnames{$escapedname} = $seqname;
+		}
+	}
+
+	print Dumper(%unescapedSeqnames);
 
 	my $csv_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/$prefix/${prefix}_global-phage-signal.csv";
 	my $mga_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/$prefix/${prefix}_mga_final.predict";
@@ -111,6 +136,9 @@ sub get_predictions {
 				if(exists $genes{$1}){
 					$current_sequence = $1;
 					$current_seqname = substr($current_sequence, length($prefix)+1);
+					if(exists $unescapedSeqnames{$current_seqname}){
+						$current_seqname = $unescapedSeqnames{$current_seqname};
+					}
 					if (not exists $predictions{$current_seqname}){
 						$predictions{$current_seqname} = [];
 					}

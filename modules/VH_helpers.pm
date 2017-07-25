@@ -1,6 +1,12 @@
 #! /usr/bin/perl
 
+# Various helper functions for VICSIN Pipeline
+# Copyright 2017 University of Illinois at Urbana-Champaign
+# Author: Joe Leigh <jleigh@illinois.edu>
+
 package VH_helpers;
+
+use strict;
 use POSIX qw(strftime);
 use File::Path qw(rmtree);
 use Data::Dumper;

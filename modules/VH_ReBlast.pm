@@ -1,5 +1,9 @@
 #!/usr/bin/perl
 
+# Re-BLAST module for VICSIN Pipeline
+# Copyright 2017 University of Illinois at Urbana-Champaign
+# Author: Joe Leigh <jleigh@illinois.edu>
+
 package VH_ReBlast;
 
 use File::Path qw(make_path);
@@ -28,8 +32,8 @@ sub run {
 		VH_helpers->log($params,"\tRunning re-blast for $curprefix...",1);
 		# Generate fasta file with predictions to query against
 		VH_helpers->log($params,"\t\tGenerating fasta file for re-blast... ",2);
-		my $query_fasta_file_name = $params->{"output_path"}."/".REBLAST_DIR."/$curprefix-query.fna" or die "Could not truncate query file.";
-		open(my $queryfh, '>', $query_fasta_file_name);
+		my $query_fasta_file_name = $params->{"output_path"}."/".REBLAST_DIR."/$curprefix-query.fna";
+		open(my $queryfh, '>', $query_fasta_file_name) or die "Could not truncate query file.";
 		my %query_lengths;
 		foreach my $prefix (@{$prefixes}){
 			if($curprefix ne $prefix){
@@ -46,7 +50,7 @@ sub run {
 							my $predCount = 1;
 							for (my $bin = 0; $bin < 4; $bin++) {
 								foreach my $prediction (@{$predictions->{$prefix}[$bin]}){
-									if ($seqname eq $prediction->{'sequence'}){
+									if ($seqname eq $prediction->{'sequence'} and $prediction->{'end'}-$prediction->{'start'}>=$params->{'reblast_min_contig_length'}){
 										print $queryfh '>'.$prefix.'-'.$seqname.'-'.$predCount."\n";
 										print $queryfh substr($sequence,$prediction->{'start'}-1,$prediction->{'end'}-$prediction->{'start'})."\n";
 										$query_lengths{$prefix.'-'.$seqname.'-'.$predCount} = $prediction->{'end'}-$prediction->{'start'}+1;
@@ -84,14 +88,16 @@ sub run {
 
 		# Re-blast predictions against all prefixes
 		my $fasta_file_name = $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$curprefix.fna";
-		my $query_file_name = $params->{"output_path"}."/".REBLAST_DIR."/$curprefix-query.fna";
 		my $br_file_name = $params->{"output_path"}."/".REBLAST_DIR."/$curprefix.br";
+		
 		# Run blastn
 		VH_helpers->log($params,"\t\tRunning blastn... ",2);
-		`$params->{blastn} -query $query_file_name -subject $fasta_file_name -outfmt 6 -out $br_file_name`;
+		my $blast_cmd = "$params->{blastn} -query $query_fasta_file_name -subject $fasta_file_name -outfmt 6 -out $br_file_name";
+		VH_helpers->log($params, "\t\t$blast_cmd", 2);
+		`$blast_cmd`;
 
 		# Delete fasta file (it's huge)
-		unlink($query_file_name);
+		unlink($query_fasta_file_name);
 
 		# Parse Results
 		VH_helpers->log($params,"\t\tParsing blast output... ",2);

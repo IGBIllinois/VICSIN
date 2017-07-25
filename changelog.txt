@@ -1,0 +1,27 @@
+VICSIN Changelog
+
+0.5
+- Fixed VirSorter contig renaming issue
+- Replaced step 7 with code provided by Ted Kim
+- Overhauled step 6 with new procedure provided by Danielle Campbell
+- Added minimum contig length for reblast
+- Added num_threads for virsorter, spine
+- Virushunting is now called VICSIN!
+- Updated to work with newest version of VirSorter (20170215)
+- Updated to work with newest version of AGEnt (0.2.1)
+- Modified MCLdump2clusters to take an optional prefix (so the small prediction clusters can be number S1, S2...)
+
+0.4 (Jan 13, 2017)
+- Output can now optionally be logged in a MySQL database
+- Minor bug fixes
+
+0.3 (Oct 19, 2016)
+- Added clustering steps
+- Minor bug fixes
+
+0.2 (Oct 4, 2016)
+- ReBLAST step now only uses type 1 and 2 predictions
+- "Nearby" predictions now get merged together
+
+0.1 (Sep 6, 2016)
+- Initial release

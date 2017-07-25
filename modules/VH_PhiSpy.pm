@@ -1,5 +1,9 @@
 #!/usr/bin/perl
 
+# PhiSpy module for VICSIN Pipeline
+# Copyright 2017 University of Illinois at Urbana-Champaign
+# Author: Joe Leigh <jleigh@illinois.edu>
+
 package VH_PhiSpy;
 
 use File::Path qw(make_path);
@@ -32,9 +36,11 @@ sub run {
 			say $lockfh "$$";
 			close $lockfh;
 
-			`python $params->{phispy} -i $seed_file_name -n $params->{phispy_threshold} -o $phispy_dir_name -w $params->{phispy_windowsize} -qt`;
+			my $phispy_cmd = "python $params->{phispy} -i $seed_file_name -n $params->{phispy_threshold} -o $phispy_dir_name -w $params->{phispy_windowsize} -qt";
+			VH_helpers->log($params, "\t\t$phispy_cmd",2);
+			`$phispy_cmd`;
 
-			VH_helpers::clean_folder($phispy_dir_name,[$tbl_file_name]);
+			VH_helpers->clean_folder($phispy_dir_name,[$tbl_file_name]);
 			if ($? == 0){
 			} else {
 				VH_helpers->log($params,"PhiSpy returned an error on $_.");

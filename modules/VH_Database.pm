@@ -1,5 +1,9 @@
 #!/usr/bin/perl
 
+# MySQL Database interface module for VICSIN Pipeline
+# Copyright 2017 University of Illinois at Urbana-Champaign
+# Author: Joe Leigh <jleigh@illinois.edu>
+
 package VH_Database;
 
 use strict;
