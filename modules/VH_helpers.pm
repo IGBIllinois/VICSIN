@@ -35,7 +35,6 @@ sub clean_folder {
 }
 
 sub log {
-	shift;
 	my $params = shift;
 	my $message = shift;
 	my $level = shift;
@@ -55,6 +54,13 @@ sub log {
 			print "\n";
 		}
 	}
+}
+
+sub run_cmd {
+	my $params = shift;
+	my $cmd = shift;
+	VH_helpers::log($params,"\t\t$cmd",2);
+	return `$cmd`;
 }
 
 sub log_done {

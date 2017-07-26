@@ -17,7 +17,7 @@ sub run {
 	my $params = shift;
 	my $prefixes = shift;
 
-	VH_helpers->log($params,"Starting CRISPR runs...");
+	VH_helpers::log($params,"Starting CRISPR runs...");
 
 	foreach(@$prefixes) {
 		my $fasta_file_name = $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna";
@@ -27,17 +27,15 @@ sub run {
 
 		# If the crispr file exists but not the lock file, the CRISPR run was already complete
 		if (-f $crispr_file_name and not -f $lock_file_name){
-			VH_helpers->log($params,"$_ CRISPR already completed. Skipping.",1);
+			VH_helpers::log($params,"$_ CRISPR already completed. Skipping.",1);
 		} else {
-			VH_helpers->log($params,"\tRunning CRISPR blast for $_...",1);
+			VH_helpers::log($params,"\tRunning CRISPR blast for $_...",1);
 			# Create a lockfile to signify that the CRISPR run is in progress
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
 			close $lockfh;
 
-			my $crispr_cmd = "$params->{blastn} -task \"blastn-short\" -subject $fasta_file_name -query $params->{spacer_fasta_file} -outfmt 6 -out $crispr_file_name";
-			VH_helpers->log($params, "\t\t$crispr_cmd", 2);
-			`$crispr_cmd`;
+			VH_helpers::run_cmd($params,"$params->{blastn} -task \"blastn-short\" -subject $fasta_file_name -query $params->{spacer_fasta_file} -outfmt 6 -out $crispr_file_name");
 			
 			unlink $lock_file_name;
 		}

@@ -24,9 +24,9 @@ sub run {
 	my %clusternames;
 
 	### 6. CLUSTER PREDICTIONS
-	VH_helpers->log($params,"Clustering...");
+	VH_helpers::log($params,"Clustering...");
 	make_path($params->{"output_path"}."/".CLUSTER_DIR);
-	VH_helpers->log($params,"\t\tGenerating query fasta file... ",2);
+	VH_helpers::log($params,"\t\tGenerating query fasta file... ",2);
 	# 6.1. Generate fasta file with predictions
 	my $query_fasta_file_name = $params->{"output_path"}."/".CLUSTER_DIR."/all.fasta";
 	open(my $queryfh, '>', $query_fasta_file_name);
@@ -76,34 +76,34 @@ sub run {
 	close($queryfh);
 
 	# 6.2. Generate blast database
-	VH_helpers->log($params,"\t\tGenerating blast database... ",2);
+	VH_helpers::log($params,"\t\tGenerating blast database... ",2);
 	my $dbname = $params->{"output_path"}."/".CLUSTER_DIR."/all_db";
-	`$params->{makeblastdb} -in $query_fasta_file_name -parse_seqids -dbtype nucl -out $dbname`;
+	VH_helpers::run_cmd($params,"$params->{makeblastdb} -in $query_fasta_file_name -parse_seqids -dbtype nucl -out $dbname");
 
 	# 6.3. Run blastn against all virsorter/phispy predictions and curated database phage
-	VH_helpers->log($params,"\t\tBlasting predictions against curated database... ",2);
+	VH_helpers::log($params,"\t\tBlasting predictions against curated database... ",2);
 	my $blast_file_name = $params->{'output_path'}."/".CLUSTER_DIR."/blast.aln";
-	`$params->{blastn} -db $dbname -query $query_fasta_file_name -num_threads 1 -outfmt '6 std qlen' -max_target_seqs 1000000 -evalue 0.0001 -out $blast_file_name`;
+	VH_helpers::run_cmd($params,"$params->{blastn} -db $dbname -query $query_fasta_file_name -num_threads 1 -outfmt '6 std qlen' -max_target_seqs 1000000 -evalue 0.0001 -out $blast_file_name");
 
 	# 6.4. Convert blast.aln to out.tbl
-	VH_helpers->log($params,"\t\tConverting to MCL input... ",2);
+	VH_helpers::log($params,"\t\tConverting to MCL input... ",2);
 	my $out_tbl_name = $params->{'output_path'}."/".CLUSTER_DIR."/out.tbl";
-	`$params->{blast_to_mcl} $blast_file_name > $out_tbl_name`;
+	VH_helpers::run_cmd($params,"$params->{blast_to_mcl} $blast_file_name > $out_tbl_name");
 
 	# 6.5. Threshold & use the correct clustering parameter
-	VH_helpers->log($params,"\t\tApplying clustering parameter... ",2);
+	VH_helpers::log($params,"\t\tApplying clustering parameter... ",2);
 	my $mcl_in_name = $params->{'output_path'}."/".CLUSTER_DIR."/mcl_in.abc";
 	if($params->{'clustering_parameter'} eq "total_length_aligned"){
-		`awk '{if (\$4 >= $params->{cluster_min_length}) print \$1 "\t" \$2 "\t" \$4}' $out_tbl_name > $mcl_in_name`;
+		VH_helpers::run_cmd($params,"awk '{if (\$4 >= $params->{cluster_min_length}) print \$1 \"\t\" \$2 \"\t\" \$4}' $out_tbl_name > $mcl_in_name");
 	} elsif ($params->{'clustering_parameter'} eq "total_bit_score") {
-		`awk '{if (\$5 >= $params->{cluster_min_bit_score}) print \$1 "\t" \$2 "\t" \$5}' $out_tbl_name > $mcl_in_name`;
+		VH_helpers::run_cmd($params,"awk '{if (\$5 >= $params->{cluster_min_bit_score}) print \$1 \"\t\" \$2 \"\t\" \$5}' $out_tbl_name > $mcl_in_name");
 	} else { # Percent_length_allowed is default
-		`awk '{if (\$3 >= $params->{cluster_min_perc_length}) print \$1 "\t" \$2 "\t" \$3}' $out_tbl_name > $mcl_in_name`;
+		VH_helpers::run_cmd($params,"awk '{if (\$3 >= $params->{cluster_min_perc_length}) print \$1 \"\t\" \$2 \"\t\" \$3}' $out_tbl_name > $mcl_in_name");
 	}
 
 	# 6.5.a. Filter out small predictions from mcl_in.abc
 	# TODO put in known types
-	VH_helpers->log($params,"\t\tFiltering out small predictions... ",2);
+	VH_helpers::log($params,"\t\tFiltering out small predictions... ",2);
 	my $mcl_in_large_name = $params->{'output_path'}."/".CLUSTER_DIR."/mcl_in_large.abc";
 	open(my $mcl_in_fh, '<', $mcl_in_name);
 	open(my $mcl_in_large_fh, '>', $mcl_in_large_name);
@@ -117,21 +117,21 @@ sub run {
 	}
 
 	# 6.6. Run mcl with blast.aln file (filter blast hits at a certain percent identity)
-	VH_helpers->log($params,"\t\tRunning mcl... ",2);
+	VH_helpers::log($params,"\t\tRunning mcl... ",2);
 	my $mci_file_name = 		$params->{'output_path'}."/".CLUSTER_DIR."/blast.mci";
 	my $tab_file_name = 		$params->{'output_path'}."/".CLUSTER_DIR."/blast.tab";
 	my $cluster_file_name = 	$params->{'output_path'}."/".CLUSTER_DIR."/out.blast.mci";
 	my $dump_file_name = 		$params->{'output_path'}."/".CLUSTER_DIR."/dump.blast.mci";
 	my $reformat_file_name = 	$params->{'output_path'}."/".CLUSTER_DIR."/dump.reformat.blast.mci";
-	`$params->{mcxload} -abc $mcl_in_large_name --stream-mirror -o $mci_file_name -write-tab $tab_file_name > /dev/null 2>&1`;
-	`$params->{mcl} $mci_file_name -I $params->{mcl_inflation} -o $cluster_file_name -q x -V all`;
-	`$params->{mcxdump} -icl $cluster_file_name -tabr $tab_file_name -o $dump_file_name > /dev/null 2>&1`;
+	VH_helpers::run_cmd($params,"$params->{mcxload} -abc $mcl_in_large_name --stream-mirror -o $mci_file_name -write-tab $tab_file_name > /dev/null 2>&1");
+	VH_helpers::run_cmd($params,"$params->{mcl} $mci_file_name -I $params->{mcl_inflation} -o $cluster_file_name -q x -V all");
+	VH_helpers::run_cmd($params,"$params->{mcxdump} -icl $cluster_file_name -tabr $tab_file_name -o $dump_file_name > /dev/null 2>&1");
 	# 6.7. Reformat MCL dump file
-	`$params->{mcldump2clusters} $dump_file_name $reformat_file_name`;
+	VH_helpers::run_cmd($params,"$params->{mcldump2clusters} $dump_file_name $reformat_file_name");
 	print "\n";
 
 	#6.8 Add small predictions to clusters
-	VH_helpers->log($params,"\t\tAdding small predictions to existing clusters... ",2);
+	VH_helpers::log($params,"\t\tAdding small predictions to existing clusters... ",2);
 	open(my $reformat_fh, '<', $reformat_file_name);
 	while(my $row = <$reformat_fh>){
 		chomp $row;
@@ -176,10 +176,10 @@ sub run {
 		}
 	}
 	# Reformat dump file again, since it's changed
-	`$params->{mcldump2clusters} $dump_file_name $reformat_file_name`;
+	VH_helpers::run_cmd($params,"$params->{mcldump2clusters} $dump_file_name $reformat_file_name");
 
 	#6.9 Cluster remaining small predictions
-	VH_helpers->log($params, "\t\tClustering remaining small predictions... ",2);
+	VH_helpers::log($params, "\t\tClustering remaining small predictions... ",2);
 	my $mcl_in_small_name = $params->{'output_path'}."/".CLUSTER_DIR."/mcl_in_small.abc";
 	seek($mcl_in_fh, 0, SEEK_SET);
 	open(my $mcl_in_small_fh, '>', $mcl_in_small_name);
@@ -197,11 +197,11 @@ sub run {
 	my $cluster_small_file_name = 	$params->{'output_path'}."/".CLUSTER_DIR."/out_small.blast.mci";
 	my $dump_small_file_name = 		$params->{'output_path'}."/".CLUSTER_DIR."/dump_small.blast.mci";
 	my $reformat_small_file_name = 	$params->{'output_path'}."/".CLUSTER_DIR."/dump_small.reformat.blast.mci";
-	`$params->{mcxload} -abc $mcl_in_small_name --stream-mirror -o $mci_small_file_name -write-tab $tab_small_file_name > /dev/null 2>&1`;
-	`$params->{mcl} $mci_small_file_name -I $params->{mcl_inflation} -o $cluster_small_file_name -q x -V all`;
-	`$params->{mcxdump} -icl $cluster_small_file_name -tabr $tab_small_file_name -o $dump_small_file_name > /dev/null 2>&1`;
+	VH_helpers::run_cmd($params,"$params->{mcxload} -abc $mcl_in_small_name --stream-mirror -o $mci_small_file_name -write-tab $tab_small_file_name > /dev/null 2>&1");
+	VH_helpers::run_cmd($params,"$params->{mcl} $mci_small_file_name -I $params->{mcl_inflation} -o $cluster_small_file_name -q x -V all");
+	VH_helpers::run_cmd($params,"$params->{mcxdump} -icl $cluster_small_file_name -tabr $tab_small_file_name -o $dump_small_file_name > /dev/null 2>&1");
 	# 6.10. Reformat small MCL dump file
-	`$params->{mcldump2clusters} $dump_small_file_name $reformat_small_file_name S`;
+	VH_helpers::run_cmd($params,"$params->{mcldump2clusters} $dump_small_file_name $reformat_small_file_name S");
 
 	# 6.11. Add small clusters to previous dump files
 	tie my @dump_small_file, 'Tie::File', $dump_small_file_name;
@@ -216,8 +216,8 @@ sub run {
 
 
 	### 7. DEFINE CORE GENOME OF EACH CLUSTER
-	VH_helpers->log($params,"Defining Core Genomes...");
-	VH_helpers->log($params,"\t\tParsing MCL Dump... ",2);
+	VH_helpers::log($params,"Defining Core Genomes...");
+	VH_helpers::log($params,"\t\tParsing MCL Dump... ",2);
 	my @clusters = ();
 	open(my $dump_fh, '<', $dump_file_name);
 	while(my $row = <$dump_fh>){
@@ -229,7 +229,7 @@ sub run {
 
 	my @cluster_core;
 	for(my $i=0; $i<scalar(@clusters); $i++){
-		VH_helpers->log($params,"\t\tCreating cluster blast report $i/".(scalar(@clusters)-1)."...",2);
+		VH_helpers::log($params,"\t\tCreating cluster blast report $i/".(scalar(@clusters)-1)."...",2);
 		# Create blast report containing only the results from the cluster
 		my $cluster_blast_name = $params->{'output_path'}."/".CLUSTER_DIR."/blast_cluster_$i.aln";
 		open(my $blast_fh, '<', $blast_file_name);
@@ -248,7 +248,7 @@ sub run {
 
 		my $cluster_core_name = $params->{"output_path"}."/".CLUSTER_DIR."/core_$i.txt";
 
-		`$params->{core_genome} $cluster_blast_name $params->{percent_id_min_core} $params->{cluster_core_max_distance} > $cluster_core_name`;
+		VH_helpers::run_cmd($params,"$params->{core_genome} $cluster_blast_name $params->{percent_id_min_core} $params->{cluster_core_max_distance} > $cluster_core_name");
 		unlink $cluster_blast_name;
 	}
 	print "\n";

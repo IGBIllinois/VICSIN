@@ -26,7 +26,7 @@ sub insert {
 
 	my $login = getpwuid($<) || "unknown";
 
-	VH_helpers->log($params,"Inserting into database... ");
+	VH_helpers::log($params,"Inserting into database... ");
 
 	# Insert run
 	my $run_stmt = $dbh->prepare('INSERT INTO runs (date, phispy_windowsize, phispy_threshold, spine_percent_input, spine_max_distance, spine_agent_min_perc_id, spine_agent_min_size_core, spine_core_file, spacer_fasta_file, known_viral_types, virsorter_database, clustering_parameter, reblast_min_perc_id, reblast_min_perc_length, reblast_distance, reblast_edge_distance, cluster_core_congruence, user) values (NOW(),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
@@ -51,7 +51,7 @@ sub insert {
 	my $cluster_stmt = $dbh->prepare('INSERT INTO clusters (run_id, cluster_id) values (?,?)');
 	my $cluster_core_stmt = $dbh->prepare('INSERT INTO cluster_core (run_id, cluster_id, mge_id, start, stop) values (?,?,?,?,?)');
 	foreach my $prefix (@{$prefixes}){
-		VH_helpers->log($params,"\t".$prefix."... ",1);
+		VH_helpers::log($params,"\t".$prefix."... ",1);
 		# Insert genomes
 		 # TODO what is `genes`?
 		$genome_stmt->execute($run_id, $genomes->{$prefix}{'name'}, $genomes->{$prefix}{'length'}, $genomes->{$prefix}{'scaffolds'}, $genomes->{$prefix}{'genes'}, $genomes->{$prefix}{'format'}, $genomes->{$prefix}{'version'}, $genomes->{$prefix}{'definition'}, $genomes->{$prefix}{'accession'}, $genomes->{$prefix}{'dblink'}, $genomes->{$prefix}{'keywords'}, $genomes->{$prefix}{'organism'}, $genomes->{$prefix}{'strain'}) or die "execution failed: ".$dbh->errstr();
@@ -129,7 +129,7 @@ sub insert {
 		}
 	}
 	# Insert Clusters
-	VH_helpers->log($params,"\tClusters...",1,0);
+	VH_helpers::log($params,"\tClusters...",1,0);
 	for(my $cluster=0; $cluster<scalar(@{$clusters}); $cluster++){
 		$cluster_stmt->execute($run_id,$cluster);
 		for(my $sequence=0; $sequence<scalar(@{$clusters->[$cluster]}); $sequence++){

@@ -20,7 +20,7 @@ sub run {
 	my $params = shift;
 	my $prefixes = shift;
 
-	VH_helpers->log($params,"Starting VirSorter runs...");
+	VH_helpers::log($params,"Starting VirSorter runs...");
 	foreach(@$prefixes) {
 		my $fasta_file_name =  File::Spec->rel2abs( $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna" );
 		my $wdir = $params->{"output_path"}."/".VIRSORTER_DIR."/$_";
@@ -33,18 +33,16 @@ sub run {
 
 		# If the virsorter files exist but not the lock file, virsorter previously completed
 		if ( -f $csv_file_name and -f $mga_dest_file_name and not -f $lock_file_name ){ 
-			VH_helpers->log($params,"\t$_ VirSorter already completed. Skipping.",1);
+			VH_helpers::log($params,"\t$_ VirSorter already completed. Skipping.",1);
 		} else {
-			VH_helpers->log($params,"\tRunning VirSorter for $_... ",1);
+			VH_helpers::log($params,"\tRunning VirSorter for $_... ",1);
 			make_path($wdir);
 			# Create a lockfile to signify that the VirSorter run is in progress
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
 			close $lockfh;
 
-			my $virsorter_cmd = "$params->{virsorter} -d $_ --fna $fasta_file_name --db $params->{virsorter_database} --data-dir $data_dir --ncpu $params->{num_threads} 2>&1";
-			VH_helpers->log($params,"\t\t$virsorter_cmd",2);
-			`cd $wdir; $virsorter_cmd; cd -`;
+			VH_helpers::run_cmd($params,"cd $wdir; $params->{virsorter} -d $_ --fna $fasta_file_name --db $params->{virsorter_database} --data-dir $data_dir --ncpu $params->{num_threads} 2>&1; cd -;");
 			
 			# Move mga file to its final destination
 			mv($mga_file_name,$mga_dest_file_name);
@@ -76,8 +74,6 @@ sub get_predictions {
 			$unescapedSeqnames{$escapedname} = $seqname;
 		}
 	}
-
-	print Dumper(%unescapedSeqnames);
 
 	my $csv_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/$prefix/${prefix}_global-phage-signal.csv";
 	my $mga_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/$prefix/${prefix}_mga_final.predict";

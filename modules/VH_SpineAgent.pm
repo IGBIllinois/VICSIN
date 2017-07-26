@@ -25,13 +25,13 @@ sub run {
 	# If no spine core file is given (or found), run spine to generate one
 	# TODO If spine core file needs to be generated, we should regenerate it in case something has changed.
 	if ($params->{"spine_core_file"} ne ""){
-		VH_helpers->log($params,"Spine core file given. Skipping spine.");
+		VH_helpers::log($params,"Spine core file given. Skipping spine.");
 		$core_file_given = 1;
 	# } elsif ($params->{"spine_core_file"} eq "" and not -f $params->{"output_path"}."/".SPINE_DIR."/spine_lock" and -f $params->{"output_path"}."/".SPINE_DIR."/output.backbone.fasta"){
 	# 	$params->{"spine_core_file"} = $params->{"output_path"}."/".SPINE_DIR."/output.backbone.fasta";
 	# 	print "\nSpine core file found. Skipping spine.\n";
 	} else {
-		VH_helpers->log($params,"Starting Spine run... ");
+		VH_helpers::log($params,"Starting Spine run... ");
 		my $spine_input_file = "spine_input.txt";
 		my $lock_file_name = $params->{"output_path"}."/".SPINE_DIR."/spine_lock";
 		make_path($params->{"output_path"}."/".SPINE_DIR);
@@ -49,9 +49,7 @@ sub run {
 		
 		# Run spine
 		my $wdir = $params->{'output_path'}.'/'.SPINE_DIR;
-		my $spine_cmd = "perl $params->{spine} -f $spine_input_file -p $params->{spine_agent_min_perc_id} -s $params->{spine_agent_min_size_core} -a $params->{spine_percent_input} -g $params->{spine_max_distance} -t $params->{num_threads} 2>&1";
-		VH_helpers->log($params, "\t\t$spine_cmd", 2);
-		`cd $wdir; $spin_cmd; cd -`;
+		VH_helpers::run_cmd($params,"cd $wdir; perl $params->{spine} -f $spine_input_file -p $params->{spine_agent_min_perc_id} -s $params->{spine_agent_min_size_core} -a $params->{spine_percent_input} -g $params->{spine_max_distance} -t $params->{num_threads} 2>&1; cd -;");
 		
 		unlink $lock_file_name;
 		$params->{"spine_core_file"} = $params->{"output_path"}."/".SPINE_DIR."/output.backbone.fasta";
@@ -60,7 +58,7 @@ sub run {
 	}
 
 	# For each file:
-	VH_helpers->log($params,"Starting AGEnt runs...");
+	VH_helpers::log($params,"Starting AGEnt runs...");
 	foreach(@$prefixes){
 		my $fasta_file_name = File::Spec->rel2abs( $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna" );
 		my $core_file_name = File::Spec->rel2abs( $params->{"spine_core_file"} );
@@ -69,18 +67,16 @@ sub run {
 		make_path($wdir);
 
 		if( $core_file_given and -f $params->{"output_path"}."/".AGENT_DIR."/$_/AGENT_${_}.AGENT_${_}.accessory.fasta" and not -f $lock_file_name){
-			VH_helpers->log($params,"$_ AGEnt already completed. Skipping.",1);
+			VH_helpers::log($params,"$_ AGEnt already completed. Skipping.",1);
 		} else {
-			VH_helpers->log($params,"\tRunning AGEnt for $_... ",1);
+			VH_helpers::log($params,"\tRunning AGEnt for $_... ",1);
 			# Create a lockfile to signify that the AGEnt run is in progress
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
 			close $lockfh;
 			
 			# Run AGEnt
-			my $agent_cmd = "perl $params->{agent} -Q F -q $fasta_file_name -R F -r $core_file_name -o AGENT_$_ -m $params->{spine_agent_min_perc_id} -s $params->{spine_agent_min_size_core} 2>&1";
-			VH_helpers->log($params, "\t\t$agent_cmd", 2);
-			`cd $wdir; $agent_cmd; cd -`;		
+			VH_helpers::run_cmd($params,"cd $wdir; perl $params->{agent} -Q F -q $fasta_file_name -R F -r $core_file_name -o AGENT_$_ -m $params->{spine_agent_min_perc_id} -s $params->{spine_agent_min_size_core} 2>&1; cd -;");
 
 			unlink $lock_file_name;
 		}

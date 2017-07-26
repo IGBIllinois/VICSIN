@@ -17,7 +17,7 @@ sub run {
 	my $params = shift;
 	my $prefixes = shift;
 
-	VH_helpers->log($params,"Starting PhiSpy runs...");
+	VH_helpers::log($params,"Starting PhiSpy runs...");
 	foreach(@$prefixes) {
 		my $seed_file_name = $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$_";
 		my $phispy_dir_name = $params->{"output_path"}."/".PHISPY_DIR."/$_";
@@ -28,22 +28,20 @@ sub run {
 
 		# Check for lockfile to determine if phispy already complete
 		if (-f $tbl_file_name and not -f $lock_file_name) {
-			VH_helpers->log($params,"\t$_ PhiSpy already completed. Skipping.",1);
+			VH_helpers::log($params,"\t$_ PhiSpy already completed. Skipping.",1);
 		} else {
-			VH_helpers->log($params,"\tRunning PhiSpy for $_... ",1);
+			VH_helpers::log($params,"\tRunning PhiSpy for $_... ",1);
 			# Create a lockfile to signify that the CRISPR run is in progress
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
 			close $lockfh;
 
-			my $phispy_cmd = "python $params->{phispy} -i $seed_file_name -n $params->{phispy_threshold} -o $phispy_dir_name -w $params->{phispy_windowsize} -qt";
-			VH_helpers->log($params, "\t\t$phispy_cmd",2);
-			`$phispy_cmd`;
+			VH_helpers::run_cmd($params,"python $params->{phispy} -i $seed_file_name -n $params->{phispy_threshold} -o $phispy_dir_name -w $params->{phispy_windowsize} -qt");
 
 			VH_helpers->clean_folder($phispy_dir_name,[$tbl_file_name]);
 			if ($? == 0){
 			} else {
-				VH_helpers->log($params,"PhiSpy returned an error on $_.");
+				VH_helpers::log($params,"PhiSpy returned an error on $_.");
 			}
 		}
 	}

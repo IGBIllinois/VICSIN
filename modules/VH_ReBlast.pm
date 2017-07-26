@@ -26,12 +26,12 @@ sub run {
 	my %raw_predictions;
 	my %return_predictions;
 
-	VH_helpers->log($params,"Starting blastn against predictions...");
+	VH_helpers::log($params,"Starting blastn against predictions...");
 	make_path($params->{"output_path"}."/".REBLAST_DIR);
 	foreach my $curprefix (@$prefixes){
-		VH_helpers->log($params,"\tRunning re-blast for $curprefix...",1);
+		VH_helpers::log($params,"\tRunning re-blast for $curprefix...",1);
 		# Generate fasta file with predictions to query against
-		VH_helpers->log($params,"\t\tGenerating fasta file for re-blast... ",2);
+		VH_helpers::log($params,"\t\tGenerating fasta file for re-blast... ",2);
 		my $query_fasta_file_name = $params->{"output_path"}."/".REBLAST_DIR."/$curprefix-query.fna";
 		open(my $queryfh, '>', $query_fasta_file_name) or die "Could not truncate query file.";
 		my %query_lengths;
@@ -91,16 +91,14 @@ sub run {
 		my $br_file_name = $params->{"output_path"}."/".REBLAST_DIR."/$curprefix.br";
 		
 		# Run blastn
-		VH_helpers->log($params,"\t\tRunning blastn... ",2);
-		my $blast_cmd = "$params->{blastn} -query $query_fasta_file_name -subject $fasta_file_name -outfmt 6 -out $br_file_name";
-		VH_helpers->log($params, "\t\t$blast_cmd", 2);
-		`$blast_cmd`;
-
+		VH_helpers::log($params,"\t\tRunning blastn... ",2);
+		VH_helpers::run_cmd($params,"$params->{blastn} -query $query_fasta_file_name -subject $fasta_file_name -outfmt 6 -out $br_file_name");
+		
 		# Delete fasta file (it's huge)
 		unlink($query_fasta_file_name);
 
 		# Parse Results
-		VH_helpers->log($params,"\t\tParsing blast output... ",2);
+		VH_helpers::log($params,"\t\tParsing blast output... ",2);
 		my @blast_predictions;
 		open my $br_fh, '<', $br_file_name;
 		while(my $br_line = <$br_fh>){
@@ -126,7 +124,7 @@ sub run {
 
 		# Mask results w/ masking file
 		if(exists $masks->{$curprefix}){
-			VH_helpers->log($params,"\t\tApplying mask file... ",2);
+			VH_helpers::log($params,"\t\tApplying mask file... ",2);
 			foreach my $sequence ( keys %{$masks->{$curprefix}} ){
 				foreach my $mask (@{$masks->{$curprefix}{$sequence}} ){
 					foreach my $prediction (@blast_predictions){
@@ -152,7 +150,7 @@ sub run {
 
 
 		# Mask results w/ previous predictions
-		VH_helpers->log($params,"\t\tMasking previous predictions... ",2);
+		VH_helpers::log($params,"\t\tMasking previous predictions... ",2);
 		foreach my $prefix ( @{$prefixes} ){
 			if($curprefix eq $prefix){
 				for (my $bin = 0; $bin < 4; $bin++) {
@@ -188,7 +186,7 @@ sub run {
 		}
 
 		# Combine overlapping results
-		VH_helpers->log($params,"\t\tCombining results... ",2);
+		VH_helpers::log($params,"\t\tCombining results... ",2);
 		my $found_overlaps;
 		my @combined_predictions;
 		do {
@@ -222,7 +220,7 @@ sub run {
 		} while ($found_overlaps == 1);
 
 		# Weed out results based on length
-		VH_helpers->log($params,"\t\tExcluding based on length/% identity... ",2);
+		VH_helpers::log($params,"\t\tExcluding based on length/% identity... ",2);
 		my @final_predictions;
 		my $cur = 0;
 		foreach my $prediction (@combined_predictions){
