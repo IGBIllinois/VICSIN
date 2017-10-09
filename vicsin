@@ -132,6 +132,7 @@ my %params = (
 	"mcxdump"=>"mcxdump",
 	"blast_to_mcl"=>"Blast_to_MCL.1.py",
 	"mcldump2clusters"=>"MCLdump2clusters.pl",
+	"pamprotopatterngrab"=>"PAMProtoPatternGrab_full.py",
 	"phispy_windowsize"=>40,
 	"phispy_threshold"=>20,
 	"spine_percent_input"=>100,
@@ -140,6 +141,7 @@ my %params = (
 	"spine_agent_min_size_core"=>10,
 	"spine_core_file"=>"",
 	"spacer_fasta_file"=>"",
+	"crispr_match_threshold"=>0.9,
 	"known_viral_types"=>"",
 	"virsorter_database"=>1,
 	"masking_file"=>"",
@@ -198,6 +200,7 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"mcxdump=s"=>\$params{"mcxdump"},
 			"blast_to_mcl=s"=>\$params{"blast_to_mcl"},
 			"mcldump2clusters=s"=>\$params{"mcldump2clusters"},
+			"pamprotopatterngrab=s"=>\$params{"pamprotopatterngrab"},
 			"phispy_windowsize=i"=>\$params{"phispy_windowsize"},
 			"phispy_threshold=i"=>\$params{"phispy_threshold"},
 			"spine_percent_input=i"=>\$params{"spine_percent_input"},
@@ -206,6 +209,7 @@ GetOptions(	"input_path=s"=>\$params{"input_path"},
 			"spine_agent_min_size_core=i"=>\$params{"spine_agent_min_size_core"},
 			"spine_core_file=s"=>\$params{"spine_core_file"},
 			"spacer_fasta_file=s"=>\$params{"spacer_fasta_file"},
+			"crispr_match_threshold=f"=>\$params{"crispr_match_threshold"},
 			"known_viral_types=s"=>\$params{"known_viral_types"},
 			"virsorter_database=i"=>\$params{"virsorter_database"},
 			"masking_file=s"=>\$params{"masking_file"},
@@ -772,7 +776,7 @@ my %predictions;
 my %merged_predictions;
 my %binned_predictions;
 my @methods = (
-	{'key'=>'agent','abbr'=>'A','bin'=>2,'extend'=>1},
+	{'key'=>'agent','abbr'=>'A','bin'=>3,'extend'=>1},
 	{'key'=>'virsorter','abbr'=>'V','bin'=>2,'extend'=>1},
 	{'key'=>'phispy','abbr'=>'P','bin'=>3,'extend'=>0}
 );
@@ -838,7 +842,7 @@ print "\n";
 my $reblast_predictions = VH_ReBlast->run(\%params,\@valid_prefixes,\%binned_predictions,\%masks,\%contigs);
 
 # Re-orocess all results
-VH_helpers::log(\%params," Final merge...");
+VH_helpers::log(\%params,"Final merge...");
 foreach my $prefix (@valid_prefixes){
 	VH_helpers::log(\%params,"\tProcessing $prefix... ",1);
 
