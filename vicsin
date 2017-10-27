@@ -80,6 +80,7 @@ use Data::Dumper;
 # Constants
 use define CONVERTED_INPUT_DIR => "Converted_Input_Files";
 use constant OUTPUT_DIR => "Output_Files";
+use constant INTERMEDIATE_OUTPUT_DIR => "Pre_Reblast_Output_Files";
 
 use VH_VirSorter;
 use VH_PhiSpy;
@@ -837,6 +838,35 @@ foreach my $prefix (@valid_prefixes){
 	$binned_predictions{$prefix} = bin_predictions(\%merged_predictions,\%predictions,$prefix,\@methods);
 }
 print "\n";
+
+# Output intermediate results
+VH_helpers::log(\%params,"Saving Intermediate Output...");
+foreach my $prefix (@valid_prefixes){
+	#Output to file
+	VH_helpers::log(\%params,"\tSaving $prefix... ",1);
+	sub output_bin {
+		my ($fh, $bin) = @_;
+		foreach my $prediction (@$bin){
+			if(not exists $prediction->{'masked'}){
+				print $fh $prediction->{'name'}."\t".$prediction->{'sequence'}."\t".$prediction->{'methods'}."\t".$prediction->{'start'}."\t".$prediction->{'end'}."\n";
+			}
+		}
+	}
+	make_path($params{'output_path'}."/".INTERMEDIATE_OUTPUT_DIR);
+	my $output_file_name = $params{'output_path'}."/".INTERMEDIATE_OUTPUT_DIR."/$prefix.txt";
+	open my $output_fh, '>', $output_file_name;
+	print $output_fh "# Type 1: Predicted by >2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	output_bin($output_fh,$binned_predictions{$prefix}[0]);
+	print $output_fh "# Type 2: Predicted by 2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	output_bin($output_fh,$binned_predictions{$prefix}[1]);
+	print $output_fh "# Type 3: Predicted by 1 1° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	output_bin($output_fh,$binned_predictions{$prefix}[2]);
+	print $output_fh "# Type 4: Predicted by 1 2° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	output_bin($output_fh,$binned_predictions{$prefix}[3]);
+	print $output_fh "# Type 5: Protospacer match\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	output_bin($output_fh,$binned_predictions{$prefix}[4]);
+	close $output_fh;
+}
 
 ### STEP 5. RE-SCREEN PREDICTIONS AGAINST OTHER GENOMES FOR MISSED ELEMENTS ###
 my $reblast_predictions = VH_ReBlast->run(\%params,\@valid_prefixes,\%binned_predictions,\%masks,\%contigs);

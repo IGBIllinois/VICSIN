@@ -55,10 +55,27 @@ sub run {
 					}
 				}
 				$seqname = substr($row,1);
+				VH_helpers::log($params, "\t\tGrabbing from $prefix ".$seqname,2);
 				$sequence = "";
 			} else {
 				if($seqname ne ""){
 					$sequence .= $row;
+				}
+			}
+		}
+		# Grab predictions for final contig
+		if($seqname ne ""){
+			# Grab predictions from sequence
+			my $predCount = 1;
+			for (my $bin = 0; $bin < 4; $bin++) {
+				for (my $pindex=0;$pindex<scalar(@{$predictions->{$prefix}[$bin]});$pindex++){
+					# TODO check if virsorter/phispy?
+					if ($seqname eq $predictions->{$prefix}[$bin][$pindex]{'sequence'}){
+						print $queryfh '>'.$prefix.'-'.$seqname.'-'.$predCount."\n";
+						$clusternames{$prefix.'-'.$seqname.'-'.$predCount} = {'prefix'=>$prefix,'sequence'=>$seqname,'bin'=>$bin,'index'=>$pindex, 'length'=>abs($predictions->{$prefix}[$bin][$pindex]{'start'}-$predictions->{$prefix}[$bin][$pindex]{'end'})};
+						print $queryfh substr($sequence,$predictions->{$prefix}[$bin][$pindex]{'start'}-1,$predictions->{$prefix}[$bin][$pindex]{'end'}-$predictions->{$prefix}[$bin][$pindex]{'start'})."\n";
+						$predCount++;
+					}
 				}
 			}
 		}

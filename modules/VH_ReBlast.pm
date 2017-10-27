@@ -48,7 +48,7 @@ sub run {
 						if($seqname ne ""){
 							# Grab predictions from sequence
 							my $predCount = 1;
-							for (my $bin = 0; $bin < 4; $bin++) {
+							for (my $bin = 0; $bin < 2; $bin++) {
 								foreach my $prediction (@{$predictions->{$prefix}[$bin]}){
 									if ($seqname eq $prediction->{'sequence'} and $prediction->{'end'}-$prediction->{'start'}>=$params->{'reblast_min_contig_length'}){
 										print $queryfh '>'.$prefix.'-'.$seqname.'-'.$predCount."\n";
