@@ -34,7 +34,7 @@ sub run {
 
 		# If the crispr file exists but not the lock file, the CRISPR run was already complete
 		if (-f $crispr_file_name and not -f $lock_file_name){
-			VH_helpers::log("$_ CRISPR already completed. Skipping.",1);
+			VH_helpers::log("\t$_ CRISPR already completed. Skipping.",1);
 		} else {
 			VH_helpers::log("\tRunning CRISPR blast for $_...",1);
 			# Create a lockfile to signify that the CRISPR run is in progress

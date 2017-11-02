@@ -13,6 +13,9 @@ use Data::Dumper;
 
 use VICSIN;
 
+my $log_name;
+my $log_fh;
+
 sub current_time {
 	return strftime("[%Y-%m-%d %H:%M:%S] ",localtime);
 }
@@ -56,12 +59,20 @@ sub log {
 		$continue = 0;
 	}
 	if(VICSIN::param('verbosity')>=$level){
+		if(not defined $log_name){
+			$log_name = VICSIN::param('output_path').'/'."VICSIN-".strftime("%Y%m%d-%H%M",localtime).".txt";
+			open($log_fh, '>', $log_name);
+		}
 		print VH_helpers::current_time()." ";
+		print $log_fh VH_helpers::current_time()." ";
 		print $message;
+		print $log_fh $message;
 		if($continue == 1){
 			print " ";
+			print $log_fh " ";
 		} else {
 			print "\n";
+			print $log_fh "\n";
 		}
 	}
 }
@@ -79,6 +90,7 @@ sub log_done {
 	}
 	if(VICSIN::param('verbosity')>=$level){
 		print "Done.\n";
+		print $log_fh "Done.\n";
 	}
 }
 
