@@ -11,12 +11,13 @@ use POSIX qw(strftime);
 use File::Path qw(rmtree);
 use Data::Dumper;
 
+use VICSIN;
+
 sub current_time {
 	return strftime("[%Y-%m-%d %H:%M:%S] ",localtime);
 }
 
 sub clean_folder {
-	shift;
 	my $folder_name = shift;
 	my $exceptions = shift;
 
@@ -34,8 +35,17 @@ sub clean_folder {
 	}
 }
 
+sub file_of_type_exists {
+	my $prefix = shift;
+	foreach (@_) {
+		if (-f (VICSIN::param("input_path")."/".$prefix.".".$_) ) {
+			return $prefix.".".$_;
+		}
+	}
+	return undef;
+}
+
 sub log {
-	my $params = shift;
 	my $message = shift;
 	my $level = shift;
 	my $continue = shift;
@@ -45,8 +55,8 @@ sub log {
 	if (not defined $continue){
 		$continue = 0;
 	}
-	if($params->{'verbosity'}>=$level){
-		print VH_helpers->current_time()." ";
+	if(VICSIN::param('verbosity')>=$level){
+		print VH_helpers::current_time()." ";
 		print $message;
 		if($continue == 1){
 			print " ";
@@ -57,17 +67,17 @@ sub log {
 }
 
 sub run_cmd {
-	my $params = shift;
 	my $cmd = shift;
-	VH_helpers::log($params,"\t\t$cmd",2);
+	VH_helpers::log("\t\t$cmd",2);
 	return `$cmd`;
 }
 
 sub log_done {
-	shift;
-	my $params = shift;
 	my $level = shift;
-	if($params->{'verbosity'}>=$level){
+	if(not defined $level){
+		$level = 0;
+	}
+	if(VICSIN::param('verbosity')>=$level){
 		print "Done.\n";
 	}
 }

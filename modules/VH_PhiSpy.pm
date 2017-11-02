@@ -7,41 +7,40 @@
 package VH_PhiSpy;
 
 use File::Path qw(make_path);
+use VICSIN;
 use VH_helpers;
 
 no define CONVERTED_INPUT_DIR =>;
 use constant PHISPY_DIR => "PhiSpy_Runs";
 
 sub run {
-	shift;
-	my $params = shift;
 	my $prefixes = shift;
 
-	VH_helpers::log($params,"Starting PhiSpy runs...");
+	VH_helpers::log("Starting PhiSpy runs...");
 	foreach(@$prefixes) {
-		my $seed_file_name = $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/_SEED_$_";
-		my $phispy_dir_name = $params->{"output_path"}."/".PHISPY_DIR."/$_";
+		my $seed_file_name = VICSIN::param("output_path")."/".CONVERTED_INPUT_DIR."/_SEED_$_";
+		my $phispy_dir_name = VICSIN::param("output_path")."/".PHISPY_DIR."/$_";
 
-		my $tbl_file_name = $params->{"output_path"}."/".PHISPY_DIR."/$_/prophage.tbl";
-		my $lock_file_name = $params->{"output_path"}."/".PHISPY_DIR."/$_/${_}_PhiSpy_lock";
+		my $tbl_file_name = VICSIN::param("output_path")."/".PHISPY_DIR."/$_/prophage.tbl";
+		my $lock_file_name = VICSIN::param("output_path")."/".PHISPY_DIR."/$_/${_}_PhiSpy_lock";
 		make_path($phispy_dir_name);
 
 		# Check for lockfile to determine if phispy already complete
 		if (-f $tbl_file_name and not -f $lock_file_name) {
-			VH_helpers::log($params,"\t$_ PhiSpy already completed. Skipping.",1);
+			VH_helpers::log("\t$_ PhiSpy already completed. Skipping.",1);
 		} else {
-			VH_helpers::log($params,"\tRunning PhiSpy for $_... ",1);
+			VH_helpers::log("\tRunning PhiSpy for $_... ",1);
 			# Create a lockfile to signify that the CRISPR run is in progress
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
 			close $lockfh;
 
-			VH_helpers::run_cmd($params,"python $params->{phispy} -i $seed_file_name -n $params->{phispy_threshold} -o $phispy_dir_name -w $params->{phispy_windowsize} -qt");
+			VH_helpers::run_cmd("python ".VICSIN::param('phispy')." -i $seed_file_name -n ".VICSIN::param('phispy_threshold')." -o $phispy_dir_name -w ".VICSIN::param('phispy_windowsize')." -qt");
 
-			VH_helpers->clean_folder($phispy_dir_name,[$tbl_file_name]);
+			VH_helpers::clean_folder($phispy_dir_name,[$tbl_file_name]);
 			if ($? == 0){
 			} else {
-				VH_helpers::log($params,"PhiSpy returned an error on $_.");
+				VH_helpers::log("PhiSpy returned an error on $_.");
 			}
 		}
 	}
@@ -49,11 +48,9 @@ sub run {
 }
 
 sub get_predictions {
-	shift;
-	my $params = shift;
 	my $prefix = shift(@_);
 
-	my $tbl_file_name = $params->{"output_path"}."/".PHISPY_DIR."/$prefix/prophage.tbl";
+	my $tbl_file_name = VICSIN::param("output_path")."/".PHISPY_DIR."/$prefix/prophage.tbl";
 
 	my %predictions;
 	open my $tbl_fh, '<', $tbl_file_name;

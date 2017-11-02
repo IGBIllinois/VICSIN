@@ -8,12 +8,11 @@ package VH_Database;
 
 use strict;
 use DBI;
+use VICSIN;
 use VH_helpers;
 use Data::Dumper;
 
 sub insert {
-	shift;
-	my $params = shift;
 	my $prefixes = shift;
 	my $genomes = shift;
 	my $sequences = shift;
@@ -22,15 +21,15 @@ sub insert {
 	my $binned_predictions = shift;
 	my $clusters = shift;
 
-	my $dbh = DBI->connect("DBI:mysql:database=".$params->{'database_name'}.";host=".$params->{'database_host'}.";port=".$params->{'database_port'}, $params->{'database_user'}, $params->{'database_pass'});
+	my $dbh = DBI->connect("DBI:mysql:database=".VICSIN::param('database_name').";host=".VICSIN::param('database_host').";port=".VICSIN::param('database_port'), VICSIN::param('database_user'), VICSIN::param('database_pass'));
 
 	my $login = getpwuid($<) || "unknown";
 
-	VH_helpers::log($params,"Inserting into database... ");
+	VH_helpers::log("Inserting into database... ");
 
 	# Insert run
 	my $run_stmt = $dbh->prepare('INSERT INTO runs (date, phispy_windowsize, phispy_threshold, spine_percent_input, spine_max_distance, spine_agent_min_perc_id, spine_agent_min_size_core, spine_core_file, spacer_fasta_file, known_viral_types, virsorter_database, clustering_parameter, reblast_min_perc_id, reblast_min_perc_length, reblast_distance, reblast_edge_distance, cluster_core_congruence, user) values (NOW(),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-	$run_stmt->execute($params->{'phispy_windowsize'}, $params->{'phispy_threshold'}, $params->{'spine_percent_input'}, $params->{'spine_max_distance'}, $params->{'spine_agent_min_perc_id'}, $params->{'spine_agent_min_size_core'}, $params->{'spine_core_file'}, $params->{'spacer_fasta_file'}, $params->{'known_viral_types'}, $params->{'virsorter_database'}, $params->{'clustering_parameter'}, $params->{'reblast_min_perc_id'}, $params->{'reblast_min_perc_length'}, $params->{'reblast_distance'}, $params->{'reblast_edge_distance'}, $params->{'cluster_core_congruence'}, $login);
+	$run_stmt->execute(VICSIN::param('phispy_windowsize'), VICSIN::param('phispy_threshold'), VICSIN::param('spine_percent_input'), VICSIN::param('spine_max_distance'), VICSIN::param('spine_agent_min_perc_id'), VICSIN::param('spine_agent_min_size_core'), VICSIN::param('spine_core_file'), VICSIN::param('spacer_fasta_file'), VICSIN::param('known_viral_types'), VICSIN::param('virsorter_database'), VICSIN::param('clustering_parameter'), VICSIN::param('reblast_min_perc_id'), VICSIN::param('reblast_min_perc_length'), VICSIN::param('reblast_distance'), VICSIN::param('reblast_edge_distance'), VICSIN::param('cluster_core_congruence'), $login);
 	my $run_id = $run_stmt->{'mysql_insertid'};
 
 	my $genome_stmt = $dbh->prepare('INSERT INTO genomes (run_id,genome,length,scaffolds,genes,input_format,version,definition,accession,dblink,keywords, organism, strain) values (?,?,?,?,?,?,?,?,?,?,?,?,?)');
@@ -51,7 +50,7 @@ sub insert {
 	my $cluster_stmt = $dbh->prepare('INSERT INTO clusters (run_id, cluster_id) values (?,?)');
 	my $cluster_core_stmt = $dbh->prepare('INSERT INTO cluster_core (run_id, cluster_id, mge_id, start, stop) values (?,?,?,?,?)');
 	foreach my $prefix (@{$prefixes}){
-		VH_helpers::log($params,"\t".$prefix."... ",1);
+		VH_helpers::log("\t".$prefix."... ",1);
 		# Insert genomes
 		 # TODO what is `genes`?
 		$genome_stmt->execute($run_id, $genomes->{$prefix}{'name'}, $genomes->{$prefix}{'length'}, $genomes->{$prefix}{'scaffolds'}, $genomes->{$prefix}{'genes'}, $genomes->{$prefix}{'format'}, $genomes->{$prefix}{'version'}, $genomes->{$prefix}{'definition'}, $genomes->{$prefix}{'accession'}, $genomes->{$prefix}{'dblink'}, $genomes->{$prefix}{'keywords'}, $genomes->{$prefix}{'organism'}, $genomes->{$prefix}{'strain'}) or die "execution failed: ".$dbh->errstr();
@@ -129,7 +128,7 @@ sub insert {
 		}
 	}
 	# Insert Clusters
-	VH_helpers::log($params,"\tClusters...",1,0);
+	VH_helpers::log("\tClusters...",1,0);
 	for(my $cluster=0; $cluster<scalar(@{$clusters}); $cluster++){
 		$cluster_stmt->execute($run_id,$cluster);
 		for(my $sequence=0; $sequence<scalar(@{$clusters->[$cluster]}); $sequence++){

@@ -8,26 +8,25 @@ package VH_CRISPR;
 
 use File::Path qw(make_path);
 use File::Basename qw(basename);
+use VICSIN;
 use VH_helpers;
 
 no define CONVERTED_INPUT_DIR =>;
 use constant CRISPR_DIR => "CRISPR_Runs";
 
 sub run {
-	shift;
-	my $params = shift;
 	my $prefixes = shift;
 
-	VH_helpers::log($params,"Starting CRISPR runs...");
+	VH_helpers::log("Starting CRISPR runs...");
 
 	foreach(@$prefixes) {
-		my $fasta_file_name = $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna";
-		my $wdir = $params->{'output_path'}.'/'.CRISPR_DIR."/${_}";
+		my $fasta_file_name = VICSIN::param("output_path")."/".CONVERTED_INPUT_DIR."/$_.fna";
+		my $wdir = VICSIN::param('output_path').'/'.CRISPR_DIR."/${_}";
 		my $crispr_file_name = $wdir."/${_}_CRISPR.aln";
 		my $lock_file_name = $wdir."/${_}_CRISPR_lock";
 		my $db_file_name = $wdir."/${_}_db";
 		my $db_name = "${_}_db";
-		my $spacer_fasta_file = File::Spec->rel2abs($params->{'spacer_fasta_file'});
+		my $spacer_fasta_file = File::Spec->rel2abs(VICSIN::param('spacer_fasta_file'));
 		my $pamproto_name = $db_name."_vs_".basename($spacer_fasta_file);
 		my $pamproto_out = $wdir."/$pamproto_name.dir/$pamproto_name.extra.aln";
 		
@@ -35,23 +34,23 @@ sub run {
 
 		# If the crispr file exists but not the lock file, the CRISPR run was already complete
 		if (-f $crispr_file_name and not -f $lock_file_name){
-			VH_helpers::log($params,"$_ CRISPR already completed. Skipping.",1);
+			VH_helpers::log("$_ CRISPR already completed. Skipping.",1);
 		} else {
-			VH_helpers::log($params,"\tRunning CRISPR blast for $_...",1);
+			VH_helpers::log("\tRunning CRISPR blast for $_...",1);
 			# Create a lockfile to signify that the CRISPR run is in progress
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
 			close $lockfh;
 
 			# Create a blast database from a single genome
-			VH_helpers::run_cmd($params,"$params->{makeblastdb} -in $fasta_file_name -dbtype nucl -parse_seqids -out $db_file_name");
+			VH_helpers::run_cmd(VICSIN::param('makeblastdb')." -in $fasta_file_name -dbtype nucl -parse_seqids -out $db_file_name");
 
 			# Run PAMProtoPatternGrab_full
 			File::Path::rmtree(glob($wdir."/$pamproto_name.dir"));
-			VH_helpers::run_cmd($params,"cd $wdir; $params->{pamprotopatterngrab} $spacer_fasta_file $db_name; cd -");
+			VH_helpers::run_cmd("cd $wdir; ".VICSIN::param('pamprotopatterngrab')." $spacer_fasta_file $db_name; cd -");
 
 			# Filter ...extra.aln with awk
-			VH_helpers::run_cmd($params,"awk '{if (\$18>=$params->{crispr_match_threshold}) print}' $pamproto_out > $crispr_file_name");
+			VH_helpers::run_cmd("awk '{if (\$18>=".VICSIN::param('crispr_match_threshold').") print}' $pamproto_out > $crispr_file_name");
 			
 			unlink $lock_file_name;
 		}
@@ -60,11 +59,9 @@ sub run {
 }
 
 sub get_predictions {
-	shift;
-	my $params = shift;
 	my $prefix = shift(@_);
 
-	my $aln_file_name = $params->{"output_path"}."/".CRISPR_DIR."/${prefix}/${prefix}_CRISPR.aln";
+	my $aln_file_name = VICSIN::param("output_path")."/".CRISPR_DIR."/${prefix}/${prefix}_CRISPR.aln";
 
 	my %predictions;
 	open my $aln_fh, '<', $aln_file_name;

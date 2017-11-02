@@ -9,6 +9,7 @@ package VH_VirSorter;
 use strict;
 use File::Path qw(make_path);
 use File::Copy qw(mv);
+use VICSIN;
 use VH_helpers;
 use Data::Dumper;
 
@@ -16,52 +17,48 @@ no define CONVERTED_INPUT_DIR =>;
 use constant VIRSORTER_DIR => "Virsorter_Runs";
 
 sub run {
-	shift;
-	my $params = shift;
 	my $prefixes = shift;
 
-	VH_helpers::log($params,"Starting VirSorter runs...");
+	VH_helpers::log("Starting VirSorter runs...");
 	foreach(@$prefixes) {
-		my $fasta_file_name =  File::Spec->rel2abs( $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna" );
-		my $wdir = $params->{"output_path"}."/".VIRSORTER_DIR."/$_";
-		my $data_dir = $params->{"virsorter_data_dir"};
+		my $fasta_file_name =  File::Spec->rel2abs( VICSIN::param("output_path")."/".CONVERTED_INPUT_DIR."/$_.fna" );
+		my $wdir = VICSIN::param("output_path")."/".VIRSORTER_DIR."/$_";
+		my $data_dir = VICSIN::param("virsorter_data_dir");
 
-		my $lock_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/${_}/${_}_VirSorter_lock";
-		my $csv_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/${_}/${_}_global-phage-signal.csv";
-		my $mga_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/${_}/fasta/${_}_mga_final.predict";
-		my $mga_dest_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/${_}/${_}_mga_final.predict";
+		my $lock_file_name = VICSIN::param("output_path")."/".VIRSORTER_DIR."/${_}/${_}_VirSorter_lock";
+		my $csv_file_name = VICSIN::param("output_path")."/".VIRSORTER_DIR."/${_}/${_}_global-phage-signal.csv";
+		my $mga_file_name = VICSIN::param("output_path")."/".VIRSORTER_DIR."/${_}/fasta/${_}_mga_final.predict";
+		my $mga_dest_file_name = VICSIN::param("output_path")."/".VIRSORTER_DIR."/${_}/${_}_mga_final.predict";
 
 		# If the virsorter files exist but not the lock file, virsorter previously completed
 		if ( -f $csv_file_name and -f $mga_dest_file_name and not -f $lock_file_name ){ 
-			VH_helpers::log($params,"\t$_ VirSorter already completed. Skipping.",1);
+			VH_helpers::log("\t$_ VirSorter already completed. Skipping.",1);
 		} else {
-			VH_helpers::log($params,"\tRunning VirSorter for $_... ",1);
+			VH_helpers::log("\tRunning VirSorter for $_... ",1);
 			make_path($wdir);
 			# Create a lockfile to signify that the VirSorter run is in progress
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
 			close $lockfh;
 
-			VH_helpers::run_cmd($params,"cd $wdir; $params->{virsorter} -d $_ --fna $fasta_file_name --db $params->{virsorter_database} --data-dir $data_dir --ncpu $params->{num_threads} 2>&1; cd -;");
+			VH_helpers::run_cmd("cd $wdir; ".VICSIN::param('virsorter')." -d $_ --fna $fasta_file_name --db ".VICSIN::param('virsorter_database')." --data-dir $data_dir --ncpu ".VICSIN::param('num_threads')." 2>&1; cd -;");
 			
 			# Move mga file to its final destination
 			mv($mga_file_name,$mga_dest_file_name);
 			unlink($lock_file_name);
-			VH_helpers->clean_folder($wdir,[$csv_file_name,$mga_dest_file_name,$wdir."/logs"]);
+			VH_helpers::clean_folder($wdir,[$csv_file_name,$mga_dest_file_name,$wdir."/logs"]);
 		}
 	}
 	print "\n";
 }
 
 sub get_predictions {
-	shift;
-	my $params = shift;
 	my $prefix = shift;
 
 	# Workaround for VirSorter's renaming of all the sequences. Thanks, VirSorter.
 	my %unescapedSeqnames;
 
-	my $fasta_file_name = $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$prefix.fna";
+	my $fasta_file_name = VICSIN::param("output_path")."/".CONVERTED_INPUT_DIR."/$prefix.fna";
 	open(my $fasta_fh, '<', $fasta_file_name);
 	while(my $row = <$fasta_fh>){
 		chomp $row;
@@ -75,8 +72,8 @@ sub get_predictions {
 		}
 	}
 
-	my $csv_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/$prefix/${prefix}_global-phage-signal.csv";
-	my $mga_file_name = $params->{"output_path"}."/".VIRSORTER_DIR."/$prefix/${prefix}_mga_final.predict";
+	my $csv_file_name = VICSIN::param("output_path")."/".VIRSORTER_DIR."/$prefix/${prefix}_global-phage-signal.csv";
+	my $mga_file_name = VICSIN::param("output_path")."/".VIRSORTER_DIR."/$prefix/${prefix}_mga_final.predict";
 
 	# Parse csv
 	my %genes;

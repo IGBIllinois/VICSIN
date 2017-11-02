@@ -7,33 +7,32 @@
 package VH_Blast;
 
 use File::Path qw(make_path);
+use VICSIN;
 use VH_helpers;
 
 no define CONVERTED_INPUT_DIR =>;
 use constant KNOWN_TYPES_DIR => "Known_Type_Runs";
 
 sub run {
-	shift;
-	my $params = shift;
 	my $prefixes = shift;
 
-	VH_helpers::log($params,"Starting blastn against known viral types...");
-	make_path($params->{"output_path"}."/".KNOWN_TYPES_DIR);
+	VH_helpers::log("Starting blastn against known viral types...");
+	make_path(VICSIN::param("output_path")."/".KNOWN_TYPES_DIR);
 	foreach(@$prefixes){
-		my $fasta_file_name = $params->{"output_path"}."/".CONVERTED_INPUT_DIR."/$_.fna";
-		my $output_file_name = $params->{"output_path"}."/".KNOWN_TYPES_DIR."/$_.br";
-		my $lock_file_name = $params->{"output_path"}."/".KNOWN_TYPES_DIR."/${_}_lock";
+		my $fasta_file_name = VICSIN::param("output_path")."/".CONVERTED_INPUT_DIR."/$_.fna";
+		my $output_file_name = VICSIN::param("output_path")."/".KNOWN_TYPES_DIR."/$_.br";
+		my $lock_file_name = VICSIN::param("output_path")."/".KNOWN_TYPES_DIR."/${_}_lock";
 		if( -f $output_file_name and not -f $lock_file_name){
-			VH_helpers::log($params,"\t$_ homology blast already completed. Skipping.");
+			VH_helpers::log("\t$_ homology blast already completed. Skipping.");
 		} else {
-			VH_helpers::log($params,"\tRunning homology blast for $_... ",1);
+			VH_helpers::log("\tRunning homology blast for $_... ",1);
 			# Create a lockfile to signify that the blastn run is in progress
 			open(my $lockfh, '>', $lock_file_name);
 			say $lockfh "$$";
 			close $lockfh;
 			
 			# Run blastn
-			VH_helpers::run_cmd($params,"$params->{blastn} -query $params->{known_viral_types} -subject $fasta_file_name -outfmt 6 -out $output_file_name");
+			VH_helpers::run_cmd(VICSIN::param('blastn')." -query ".VICSIN::param('known_viral_types')." -subject $fasta_file_name -outfmt 6 -out $output_file_name");
 			
 			unlink $lock_file_name;
 		}
@@ -42,11 +41,9 @@ sub run {
 }
 
 sub get_predictions {
-	shift;
-	my $params = shift;
-	my $prefix = shift(@_);
+	my $prefix = shift;
 
-	my $br_file_name = $params->{"output_path"}."/".KNOWN_TYPES_DIR."/${prefix}.br";
+	my $br_file_name = VICSIN::param("output_path")."/".KNOWN_TYPES_DIR."/${prefix}.br";
 
 	my %predictions;
 	open my $br_fh, '<', $br_file_name;
