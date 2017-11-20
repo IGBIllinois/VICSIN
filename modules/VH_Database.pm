@@ -17,7 +17,6 @@ sub insert {
 	my $genomes = shift;
 	my $sequences = shift;
 	my $predictions = shift;
-	my $reblast_predictions = shift;
 	my $binned_predictions = shift;
 	my $clusters = shift;
 
@@ -92,11 +91,12 @@ sub insert {
 				$blast->{'id'} = $blast_stmt->{'mysql_insertid'};
 			}
 		}
-		# Insert reblast hits
-		foreach my $reblast (@{$reblast_predictions->{$prefix}}){
-			$reblast_stmt->execute($genome_id, $reblast->{'query_seq'}, $reblast->{'sequence'}, $reblast->{'perc_identity'}, $reblast->{'gap'}, $reblast->{'mismatch'}, $reblast->{'query_start'}, $reblast->{'query_stop'}, $reblast->{'start'}, $reblast->{'end'}, $reblast->{'bit'}, $reblast->{'evalue'}) or die "database insert failed: ".$dbh->errstr()."\n".Dumper($reblast);
-			$reblast->{'id'} = $reblast_stmt->{'mysql_insertid'};
-		}
+		# TODO fix reblast predictions insertion
+		# # Insert reblast hits
+		# foreach my $reblast (@{$reblast_predictions->{$prefix}}){
+		# 	$reblast_stmt->execute($genome_id, $reblast->{'query_seq'}, $reblast->{'sequence'}, $reblast->{'perc_identity'}, $reblast->{'gap'}, $reblast->{'mismatch'}, $reblast->{'query_start'}, $reblast->{'query_stop'}, $reblast->{'start'}, $reblast->{'end'}, $reblast->{'bit'}, $reblast->{'evalue'}) or die "database insert failed: ".$dbh->errstr()."\n".Dumper($reblast);
+		# 	$reblast->{'id'} = $reblast_stmt->{'mysql_insertid'};
+		# }
 
 		# Insert merged predictions
 		for (my $bin=0; $bin<4; $bin++){
@@ -120,9 +120,10 @@ sub insert {
 					foreach my $homology_index (@{$prediction->{'blast'}}){
 						$mge_homology_stmt->execute($mge_id,$predictions->{$prefix}{'blast'}{$prediction->{'sequence'}}[$homology_index]{'id'});
 					}
-					foreach my $rescreen_index (@{$prediction->{'reblast'}}){
-						$mge_rescreen_stmt->execute($mge_id,$reblast_predictions->{$prefix}[$rescreen_index]{'id'});
-					}
+					# TODO fix reblast insertion
+					# foreach my $rescreen_index (@{$prediction->{'reblast'}}){
+					# 	$mge_rescreen_stmt->execute($mge_id,$reblast_predictions->{$prefix}[$rescreen_index]{'id'});
+					# }
 				}
 			}
 		}

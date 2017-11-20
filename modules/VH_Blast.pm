@@ -21,6 +21,7 @@ sub run {
 	foreach(@$prefixes){
 		my $fasta_file_name = VICSIN::param("output_path")."/".CONVERTED_INPUT_DIR."/$_.fna";
 		my $output_file_name = VICSIN::param("output_path")."/".KNOWN_TYPES_DIR."/$_.br";
+		my $log_file_name = VICSIN::param("output_path")."/".KNOWN_TYPES_DIR."/$_-log.txt";
 		my $lock_file_name = VICSIN::param("output_path")."/".KNOWN_TYPES_DIR."/${_}_lock";
 		if( -f $output_file_name and not -f $lock_file_name){
 			VH_helpers::log("\t$_ homology blast already completed. Skipping.");
@@ -32,7 +33,7 @@ sub run {
 			close $lockfh;
 			
 			# Run blastn
-			VH_helpers::run_cmd(VICSIN::param('blastn')." -query ".VICSIN::param('known_viral_types')." -subject $fasta_file_name -outfmt 6 -out $output_file_name");
+			VH_helpers::run_cmd(VICSIN::param('blastn')." -query ".VICSIN::param('known_viral_types')." -subject $fasta_file_name -outfmt 6 -out $output_file_name 2>&1 >$log_file_name");
 			
 			unlink $lock_file_name;
 		}

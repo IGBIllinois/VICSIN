@@ -183,6 +183,7 @@ sub setParam {
 
 ##### Consensus processing functions #####
 # Finds overlaps between prediction a and list of predictions b; trims overhanging edges in b
+# TODO this function has way too many side effects
 sub overlap_exists {
 	my ($a,$b) = @_;
 	

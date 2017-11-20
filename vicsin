@@ -467,7 +467,7 @@ foreach my $prefix (@valid_prefixes){
 print "\n";
 
 # Output intermediate results
-VH_helpers::log("Saving Intermediate Output...");
+VH_helpers::log("Saving Consensus Output...");
 foreach my $prefix (@valid_prefixes){
 	#Output to file
 	VH_helpers::log("\tSaving $prefix... ",1);
@@ -495,77 +495,73 @@ foreach my $prefix (@valid_prefixes){
 	close $output_fh;
 }
 
-if(VICSIN::param('stop') eq "preconsensus"){
-	VH_helpers::log('Halting as requested after preliminary consensus');
+if(VICSIN::param('stop') eq "consensus"){
+	VH_helpers::log('Halting as requested after consensus step');
 	exit;
 }
 
 ### STEP 5. RE-SCREEN PREDICTIONS AGAINST OTHER GENOMES FOR MISSED ELEMENTS ###
-my $reblast_predictions = VH_ReBlast::run(\@valid_prefixes,\%binned_predictions,\%masks,\%contigs);
+%binned_predictions = %{VH_ReBlast::run(\@valid_prefixes,\%binned_predictions,\%masks,\%contigs)};
 
-if(VICSIN::param('stop') eq "reblast"){
-	VH_helpers::log('Halting as requested after ReBLAST');
-	exit;
-}
+# DONT RE-MERGE
+# # Re-process all results
+# VH_helpers::log("Final merge...");
+# foreach my $prefix (@valid_prefixes){
+# 	VH_helpers::log("\tProcessing $prefix... ",1);
 
-# Re-orocess all results
-VH_helpers::log("Final merge...");
-foreach my $prefix (@valid_prefixes){
-	VH_helpers::log("\tProcessing $prefix... ",1);
+# 	#Process VirSorter output
+# 	VH_helpers::log("\t\tParsing VirSorter output... ",2);
+# 	$predictions{$prefix}{'virsorter'} = VH_VirSorter::get_predictions($prefix);
+# 	#Process PhiSpy output
+# 	VH_helpers::log("\t\tParsing PhiSpy output... ",2);
+# 	$predictions{$prefix}{'phispy'} = VH_PhiSpy::get_predictions($prefix);
+# 	#Process CRISPR output
+# 	if($ran_crispr == 1){
+# 		VH_helpers::log("\t\tParsing CRISPR output... ",2);
+# 		$predictions{$prefix}{'crispr'} = VH_CRISPR::get_predictions($prefix);
+# 	}
+# 	#Process AGEnt output
+# 	VH_helpers::log("\t\tParsing Agent output... ",2);
+# 	$predictions{$prefix}{'agent'} = VH_SpineAgent::get_predictions($prefix);
+# 	#Process Known Types Blast output
+# 	if($ran_known_types == 1){
+# 		VH_helpers::log("\t\tParsing Known Types output... ",2);
+# 		$predictions{$prefix}{'blast'} = VH_Blast::get_predictions($prefix);
+# 	}
 
-	#Process VirSorter output
-	VH_helpers::log("\t\tParsing VirSorter output... ",2);
-	$predictions{$prefix}{'virsorter'} = VH_VirSorter::get_predictions($prefix);
-	#Process PhiSpy output
-	VH_helpers::log("\t\tParsing PhiSpy output... ",2);
-	$predictions{$prefix}{'phispy'} = VH_PhiSpy::get_predictions($prefix);
-	#Process CRISPR output
-	if($ran_crispr == 1){
-		VH_helpers::log("\t\tParsing CRISPR output... ",2);
-		$predictions{$prefix}{'crispr'} = VH_CRISPR::get_predictions($prefix);
-	}
-	#Process AGEnt output
-	VH_helpers::log("\t\tParsing Agent output... ",2);
-	$predictions{$prefix}{'agent'} = VH_SpineAgent::get_predictions($prefix);
-	#Process Known Types Blast output
-	if($ran_known_types == 1){
-		VH_helpers::log("\t\tParsing Known Types output... ",2);
-		$predictions{$prefix}{'blast'} = VH_Blast::get_predictions($prefix);
-	}
+# 	#Apply masking file
+# 	VICSIN::apply_mask(\%predictions,$prefix,\%masks);
 
-	#Apply masking file
-	VICSIN::apply_mask(\%predictions,$prefix,\%masks);
+# 	# Merge again
+# 	VH_helpers::log("\t\tMerging predictions... ",2);
+# 	my %mergeable_predictions;
+# 	# Dump mergeable predictions into one array
+# 	for(my$i=0; $i<scalar(@VICSIN::methods); $i++){
+# 		if($VICSIN::methods[$i]{'extend'} == 1){ # We only want to merge Agent, Virsorter, and Blast hits
+# 			foreach my $sequence (keys %{$predictions{$prefix}{$VICSIN::methods[$i]{'key'}}}){
+# 				my @predictions_to_add;
+# 				foreach my $prediction (@{$predictions{$prefix}{$VICSIN::methods[$i]{'key'}}{$sequence}}){
+# 					$prediction->{'methods'} = [$VICSIN::methods[$i]{'abbr'}];
+# 					push @predictions_to_add, $prediction;
+# 				}
+# 				push @{$mergeable_predictions{$sequence}}, @predictions_to_add;
+# 			}
+# 		}
+# 	}
+# 	foreach my $prediction (@{$reblast_predictions->{$prefix}}){
+# 		if(not exists $mergeable_predictions{$prediction->{'sequence'}}){
+# 			$mergeable_predictions{$prediction->{'sequence'}} = [];
+# 		}
+# 		$prediction->{'methods'} = ['R'];
+# 		push @{$mergeable_predictions{$prediction->{'sequence'}}}, $prediction;
+# 	}
+# 	my %merged_predictions = VICSIN::merge_predictions(\%mergeable_predictions);
 
-	# Merge again
-	VH_helpers::log("\t\tMerging predictions... ",2);
-	my %mergeable_predictions;
-	# Dump mergeable predictions into one array
-	for(my$i=0; $i<scalar(@VICSIN::methods); $i++){
-		if($VICSIN::methods[$i]{'extend'} == 1){ # We only want to merge Agent, Virsorter, and Blast hits
-			foreach my $sequence (keys %{$predictions{$prefix}{$VICSIN::methods[$i]{'key'}}}){
-				my @predictions_to_add;
-				foreach my $prediction (@{$predictions{$prefix}{$VICSIN::methods[$i]{'key'}}{$sequence}}){
-					$prediction->{'methods'} = [$VICSIN::methods[$i]{'abbr'}];
-					push @predictions_to_add, $prediction;
-				}
-				push @{$mergeable_predictions{$sequence}}, @predictions_to_add;
-			}
-		}
-	}
-	foreach my $prediction (@{$reblast_predictions->{$prefix}}){
-		if(not exists $mergeable_predictions{$prediction->{'sequence'}}){
-			$mergeable_predictions{$prediction->{'sequence'}} = [];
-		}
-		$prediction->{'methods'} = ['R'];
-		push @{$mergeable_predictions{$prediction->{'sequence'}}}, $prediction;
-	}
-	my %merged_predictions = VICSIN::merge_predictions(\%mergeable_predictions);
-
-	# Bin again
-	VH_helpers::log("\t\tCross-referencing predictions... ",2);
-	$binned_predictions{$prefix} = VICSIN::bin_predictions(\%merged_predictions,\%predictions,$prefix);
-}
-print "\n";
+# 	# Bin again
+# 	VH_helpers::log("\t\tCross-referencing predictions... ",2);
+# 	$binned_predictions{$prefix} = VICSIN::bin_predictions(\%merged_predictions,\%predictions,$prefix);
+# }
+# print "\n";
 
 VH_helpers::log("Saving Output...");
 foreach my $prefix (@valid_prefixes){
@@ -596,8 +592,8 @@ foreach my $prefix (@valid_prefixes){
 }
 print "\n";
 
-if(VICSIN::param('stop') eq "consensus"){
-	VH_helpers::log('Halting as requested after consensus step');
+if(VICSIN::param('stop') eq "reblast"){
+	VH_helpers::log('Halting as requested after ReBLAST');
 	exit;
 }
 
@@ -606,7 +602,7 @@ my $clusters = VH_Cluster::run(\@valid_prefixes,\%binned_predictions);
 
 ### Finally, do database insertions ###
 if(VICSIN::param('use_database') eq 'true'){
-	VH_Database::insert(\@valid_prefixes, \%genomes, \%contigs, \%predictions, $reblast_predictions, \%binned_predictions, $clusters);
+	VH_Database::insert(\@valid_prefixes, \%genomes, \%contigs, \%predictions, \%binned_predictions, $clusters);
 }
 
 VH_helpers::log("Done.");

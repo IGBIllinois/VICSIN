@@ -48,7 +48,8 @@ sub run {
 		
 		# Run spine
 		my $wdir = VICSIN::param('output_path').'/'.SPINE_DIR;
-		VH_helpers::run_cmd("cd $wdir; perl ".VICSIN::param('spine')." -f $spine_input_file -p ".VICSIN::param('spine_agent_min_perc_id')." -s ".VICSIN::param('spine_agent_min_size_core')." -a ".VICSIN::param('spine_percent_input')." -g ".VICSIN::param('spine_max_distance')." -t ".VICSIN::param('num_threads')." 2>&1; cd -;");
+		my $log_file_path = VICSIN::param('output_path').'/'.SPINE_DIR."/log.txt";
+		VH_helpers::run_cmd("cd $wdir; perl ".VICSIN::param('spine')." -f $spine_input_file -p ".VICSIN::param('spine_agent_min_perc_id')." -s ".VICSIN::param('spine_agent_min_size_core')." -a ".VICSIN::param('spine_percent_input')." -g ".VICSIN::param('spine_max_distance')." -t ".VICSIN::param('num_threads')." 2>&1 >$log_file_path; cd -;");
 		
 		unlink $lock_file_name;
 		VICSIN::setParam("spine_core_file",VICSIN::param("output_path")."/".SPINE_DIR."/output.backbone.fasta");
@@ -62,6 +63,7 @@ sub run {
 		my $fasta_file_name = File::Spec->rel2abs( VICSIN::param("output_path")."/".CONVERTED_INPUT_DIR."/$_.fna" );
 		my $core_file_name = File::Spec->rel2abs( VICSIN::param("spine_core_file") );
 		my $lock_file_name = VICSIN::param("output_path")."/".AGENT_DIR."/$_/${_}_agent_lock";
+		my $log_file_name = VICSIN::param("output_path")."/".AGENT_DIR."/$_/log.txt";
 		my $wdir = VICSIN::param("output_path")."/".AGENT_DIR."/$_";
 		make_path($wdir);
 
@@ -75,7 +77,7 @@ sub run {
 			close $lockfh;
 			
 			# Run AGEnt
-			VH_helpers::run_cmd("cd $wdir; perl ".VICSIN::param('agent')." -Q F -q $fasta_file_name -R F -r $core_file_name -o AGENT_$_ -m ".VICSIN::param('spine_agent_min_perc_id')." -s ".VICSIN::param('spine_agent_min_size_core')." 2>&1; cd -;");
+			VH_helpers::run_cmd("cd $wdir; perl ".VICSIN::param('agent')." -Q F -q $fasta_file_name -R F -r $core_file_name -o AGENT_$_ -m ".VICSIN::param('spine_agent_min_perc_id')." -s ".VICSIN::param('spine_agent_min_size_core')." 2>&1 >$log_file_name; cd -;");
 
 			unlink $lock_file_name;
 		}

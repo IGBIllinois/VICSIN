@@ -23,6 +23,7 @@ sub run {
 
 		my $tbl_file_name = VICSIN::param("output_path")."/".PHISPY_DIR."/$_/prophage.tbl";
 		my $lock_file_name = VICSIN::param("output_path")."/".PHISPY_DIR."/$_/${_}_PhiSpy_lock";
+		my $log_file_name = VICSIN::param("output_path")."/".PHISPY_DIR."/$_/log.txt";
 		make_path($phispy_dir_name);
 
 		# Check for lockfile to determine if phispy already complete
@@ -35,9 +36,9 @@ sub run {
 			say $lockfh "$$";
 			close $lockfh;
 
-			VH_helpers::run_cmd("python ".VICSIN::param('phispy')." -i $seed_file_name -n ".VICSIN::param('phispy_threshold')." -o $phispy_dir_name -w ".VICSIN::param('phispy_windowsize')." -qt");
+			VH_helpers::run_cmd("python ".VICSIN::param('phispy')." -i $seed_file_name -n ".VICSIN::param('phispy_threshold')." -o $phispy_dir_name -w ".VICSIN::param('phispy_windowsize')." 2>&1 >$log_file_name");
 
-			VH_helpers::clean_folder($phispy_dir_name,[$tbl_file_name]);
+			VH_helpers::clean_folder($phispy_dir_name,[$tbl_file_name,$log_file_name]);
 			if ($? == 0){
 			} else {
 				VH_helpers::log("PhiSpy returned an error on $_.");
