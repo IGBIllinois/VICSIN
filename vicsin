@@ -401,7 +401,7 @@ if(index(VICSIN::param("skip"), 'blast') == -1){
 	VH_helpers::log("Skipping BLAST as requested");
 }
 
-if(VICSIN::param("stop") eq "programs"){
+if(VICSIN::param("stop") eq "prediction"){
 	VH_helpers::log("Halting as requested after running subprograms");
 	exit;
 }
