@@ -44,11 +44,11 @@ sub run {
 			close $lockfh;
 
 			# Create a blast database from a single genome
-			VH_helpers::run_cmd(VICSIN::param('makeblastdb')." -in $fasta_file_name -dbtype nucl -parse_seqids -out $db_file_name 2>&1 > $log_file_name");
+			VH_helpers::run_cmd(VICSIN::param('makeblastdb')." -in $fasta_file_name -dbtype nucl -parse_seqids -out $db_file_name 2>&1");
 
 			# Run PAMProtoPatternGrab_full
 			File::Path::rmtree(glob($wdir."/$pamproto_name.dir"));
-			VH_helpers::run_cmd("cd $wdir; ".VICSIN::param('pamprotopatterngrab')." $spacer_fasta_file $db_name 2>&1 >> $log_file_name; cd -");
+			VH_helpers::run_cmd("cd $wdir; ".VICSIN::param('pamprotopatterngrab')." $spacer_fasta_file $db_name 2>&1; cd -");
 
 			# Filter ...extra.aln with awk
 			VH_helpers::run_cmd("awk '{if (\$18>=".VICSIN::param('crispr_match_threshold').") print}' $pamproto_out > $crispr_file_name");
