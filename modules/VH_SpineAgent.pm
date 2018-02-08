@@ -96,25 +96,27 @@ sub get_predictions {
 	while(my $agent_line = <$agent_fh>){
 		chomp $agent_line;
 		my @agent_array = split "\t", $agent_line;
-		my $seq_name = $agent_array[0];
-		my $seq_length = $agent_array[1];
-		my $start = $agent_array[2];
-		my $end = $agent_array[3];
-		if($start eq "?"){
-			$start = 1;
-		}
-		if($end eq "?"){
-			$end = $seq_length;
-		}
+		if(scalar @agent_array >= 5){ # we want only the results with an "out_seq_id" column
+			my $seq_name = $agent_array[0];
+			my $seq_length = $agent_array[1];
+			my $start = $agent_array[2];
+			my $end = $agent_array[3];
 
-		if(not exists $predictions{$seq_name}){
-			$predictions{$seq_name}=[];
+			if($start eq "?"){
+				$start = 1;
+			}
+			if($end eq "?"){
+				$end = $seq_length;
+			}
+
+			if(not exists $predictions{$seq_name}){
+				$predictions{$seq_name}=[];
+			}
+			my $current_prediction = scalar(@{$predictions{$seq_name}});
+			$predictions{$seq_name}[$current_prediction]{'start'} = $start;
+			$predictions{$seq_name}[$current_prediction]{'end'} = $end;
+			$predictions{$seq_name}[$current_prediction]{'agent'} = [$current_prediction];
 		}
-		my $current_prediction = scalar(@{$predictions{$seq_name}});
-		$predictions{$seq_name}[$current_prediction]{'start'} = $start;
-		$predictions{$seq_name}[$current_prediction]{'end'} = $end;
-		$predictions{$seq_name}[$current_prediction]{'gc'} = $agent_array[2];
-		$predictions{$seq_name}[$current_prediction]{'agent'} = [$current_prediction];
 	}
 	return \%predictions;
 }
