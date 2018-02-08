@@ -70,6 +70,11 @@ sub get_predictions {
 		chomp $aln_line;
 		my @aln_array = split "\t", $aln_line;
 		my $seq_name = $aln_array[1];
+		# CRISPR returns sequence names like "ref|seqname|" so we need to extract that
+		if($seq_name =~ m/ref\|([^\|]+?)\|/){
+			print $1;
+			$seq_name = $1;
+		}
 
 		if(not exists $predictions{$seq_name}){
 			$predictions{$seq_name}=[];

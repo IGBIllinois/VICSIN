@@ -189,10 +189,10 @@ sub overlap_exists {
 	
 	my $found_overlap = 0;
 	my @predictions_to_add;
-	if( not exists $a->{'used'} ){
+	if( not exists $a->{'used'} and not exists $a->{'masked'} ){
 		foreach my $prediction (@$b){
 			my $this_prediction_hit = 0;
-			if(not (exists $prediction->{'used'} and $prediction->{'used'} == 1) ){
+			if(not (exists $prediction->{'used'} and $prediction->{'used'} == 1) and not exists $prediction->{'masked'} ){
 
 				if($a->{'start'}<=$prediction->{'start'} and $a->{'end'}>=$prediction->{'end'}){
 					# Prediction entirely contained within a
@@ -262,42 +262,46 @@ sub merge_predictions {
 			$merged_predictions{$sequence} = [];
 			$found_merges = 0;
 			for (my $i = 0; $i < scalar(@{$mergeable_predictions->{$sequence}}); $i++){
-				my $found_match = 0; 
-				for (my $j=0; $j < scalar(@{$merged_predictions{$sequence}}); $j++){
-					# If predictions overlap or are within merge_threshold of each other
-					if($found_match == 0 
-						and $mergeable_predictions->{$sequence}[$i]{'start'}<=$merged_predictions{$sequence}[$j]{'end'}+VICSIN::param('merge_threshold')
-						and $merged_predictions{$sequence}[$j]{'start'}<=$mergeable_predictions->{$sequence}[$i]{'end'}+VICSIN::param('merge_threshold')){
-						$found_match = 1;
-						$found_merges = 1;
-						# Expand bounds of j to contain i
-						if($mergeable_predictions->{$sequence}[$i]{'start'}<$merged_predictions{$sequence}[$j]{'start'}){
-							$merged_predictions{$sequence}[$j]{'start'} = $mergeable_predictions->{$sequence}[$i]{'start'};
-						}
-						if($mergeable_predictions->{$sequence}[$i]{'end'}>$merged_predictions{$sequence}[$j]{'end'}){
-							$merged_predictions{$sequence}[$j]{'end'} = $mergeable_predictions->{$sequence}[$i]{'end'};
-						}
-						# merge methods string
-						foreach my $method (@{$mergeable_predictions->{$sequence}[$i]{'methods'}}){
-							if(not grep(/^$method$/,@{$merged_predictions{$sequence}[$j]{'methods'}})){
-								push @{$merged_predictions{$sequence}[$j]{'methods'}}, $method;
-							}
-						}
+				if ( not (exists $mergeable_predictions->{$sequence}[$i]{'masked'} and $mergeable_predictions->{$sequence}[$i]{'masked'} == 1) ){ # Ignore masked out predictions
+					my $found_match = 0; 
+					for (my $j=0; $j < scalar(@{$merged_predictions{$sequence}}); $j++){
+						# If predictions overlap or are within merge_threshold of each other
+						if($found_match == 0 
+							and not (exists $merged_predictions{$sequence}[$j]{'masked'} and $merged_predictions{$sequence}[$j]{'masked'} == 1) # Ignore masked out predictions
+							and $mergeable_predictions->{$sequence}[$i]{'start'}<=$merged_predictions{$sequence}[$j]{'end'}+VICSIN::param('merge_threshold')
+							and $merged_predictions{$sequence}[$j]{'start'}<=$mergeable_predictions->{$sequence}[$i]{'end'}+VICSIN::param('merge_threshold')){
 
-						# Keep track of which hits are incorporated here
-						foreach my $method (@VICSIN::methods){
-							if(exists $mergeable_predictions->{$sequence}[$i]{$method->{'key'}}){
-								if(not exists $merged_predictions{$sequence}[$j]{$method->{'key'}}){
-									$merged_predictions{$sequence}[$j]{$method->{'key'}} = [];
+							$found_match = 1;
+							$found_merges = 1;
+							# Expand bounds of j to contain i
+							if($mergeable_predictions->{$sequence}[$i]{'start'}<$merged_predictions{$sequence}[$j]{'start'}){
+								$merged_predictions{$sequence}[$j]{'start'} = $mergeable_predictions->{$sequence}[$i]{'start'};
+							}
+							if($mergeable_predictions->{$sequence}[$i]{'end'}>$merged_predictions{$sequence}[$j]{'end'}){
+								$merged_predictions{$sequence}[$j]{'end'} = $mergeable_predictions->{$sequence}[$i]{'end'};
+							}
+							# merge methods string
+							foreach my $method (@{$mergeable_predictions->{$sequence}[$i]{'methods'}}){
+								if(not grep(/^$method$/,@{$merged_predictions{$sequence}[$j]{'methods'}})){
+									push @{$merged_predictions{$sequence}[$j]{'methods'}}, $method;
 								}
-								push @{$merged_predictions{$sequence}[$j]{$method->{'key'}}}, @{$mergeable_predictions->{$sequence}[$i]{$method->{'key'}}};
+							}
+
+							# Keep track of which hits are incorporated here
+							foreach my $method (@VICSIN::methods){
+								if(exists $mergeable_predictions->{$sequence}[$i]{$method->{'key'}}){
+									if(not exists $merged_predictions{$sequence}[$j]{$method->{'key'}}){
+										$merged_predictions{$sequence}[$j]{$method->{'key'}} = [];
+									}
+									push @{$merged_predictions{$sequence}[$j]{$method->{'key'}}}, @{$mergeable_predictions->{$sequence}[$i]{$method->{'key'}}};
+								}
 							}
 						}
 					}
-				}
-				if($found_match == 0){
-					# If this prediction didn't overlap with any others, add it to the array
-					push @{$merged_predictions{$sequence}}, $mergeable_predictions->{$sequence}[$i];
+					if($found_match == 0 ){
+						# If this prediction didn't overlap with any others, add it to the array
+						push @{$merged_predictions{$sequence}}, $mergeable_predictions->{$sequence}[$i];
+					}
 				}
 			}
 			$mergeable_predictions->{$sequence} = [];
