@@ -80,8 +80,13 @@ sub get_predictions {
 		}
 
 		my $current_prediction = scalar(@{$predictions{$seq_name}});
-		$predictions{$seq_name}[$current_prediction]{'start'} = $aln_array[8];
-		$predictions{$seq_name}[$current_prediction]{'end'} = $aln_array[9];
+		if($aln_array[8] < $aln_array[9]){
+			$predictions{$seq_name}[$current_prediction]{'start'} = $aln_array[8];
+			$predictions{$seq_name}[$current_prediction]{'end'} = $aln_array[9];
+		} else {
+			$predictions{$seq_name}[$current_prediction]{'start'} = $aln_array[9];
+			$predictions{$seq_name}[$current_prediction]{'end'} = $aln_array[8];
+		}
 		$predictions{$seq_name}[$current_prediction]{'query'} = $aln_array[0];
 		$predictions{$seq_name}[$current_prediction]{'perc_id'} = $aln_array[2];
 		$predictions{$seq_name}[$current_prediction]{'gap'} = $aln_array[5];
