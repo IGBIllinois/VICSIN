@@ -98,7 +98,7 @@ print `python -c "import Bio"`;
 # quit unless we have the correct number of args
 my $num_args = $#ARGV+1;
 if($num_args<1 || $ARGV[0] =~ /^-/){
-	print "\nUsage: virushunting.pl input.txt [config.txt] [options]\n";
+	print "\nUsage: vicsin input.txt [config.txt] [options]\n";
 	exit;
 }
 

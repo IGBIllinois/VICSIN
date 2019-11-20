@@ -333,7 +333,7 @@ sub bin_predictions {
 				}
 			}
 			my $bin;
-			if(scalar(@{$merged_predictions->{$sequence}[$j]{'methods'}}) > 2){
+			if(scalar(@{$merged_predictions->{$sequence}[$j]{'methods'}}) > 2 or join(",",@{$merged_predictions->{$sequence}[$j]{'methods'}}) eq "A,C"){  # 11/20 request that A,C also be included in bin 1
 				$bin = 0;
 			} elsif(scalar(@{$merged_predictions->{$sequence}[$j]{'methods'}}) == 2) {
 				$bin = 1;
