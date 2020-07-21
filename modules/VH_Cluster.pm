@@ -45,8 +45,8 @@ sub run {
 						for (my $pindex=0;$pindex<scalar(@{$predictions->{$prefix}[$bin]});$pindex++){
 							# TODO check if virsorter/phispy?
 							if ($seqname eq $predictions->{$prefix}[$bin][$pindex]{'sequence'}){
-								print $queryfh '>'.$prefix.'-'.$seqname.'-'.$predCount."\n";
-								$clusternames{$prefix.'-'.$seqname.'-'.$predCount} = {'prefix'=>$prefix,'sequence'=>$seqname,'bin'=>$bin,'index'=>$pindex, 'length'=>abs($predictions->{$prefix}[$bin][$pindex]{'start'}-$predictions->{$prefix}[$bin][$pindex]{'end'})};
+								print $queryfh '>'.$predictions->{$prefix}[$bin][$pindex]{'name'}."\n";
+								$clusternames{$predictions->{$prefix}[$bin][$pindex]{'name'}} = {'prefix'=>$prefix,'sequence'=>$seqname,'bin'=>$bin,'index'=>$pindex, 'length'=>abs($predictions->{$prefix}[$bin][$pindex]{'start'}-$predictions->{$prefix}[$bin][$pindex]{'end'})};
 								print $queryfh substr($sequence,$predictions->{$prefix}[$bin][$pindex]{'start'}-1,$predictions->{$prefix}[$bin][$pindex]{'end'}-$predictions->{$prefix}[$bin][$pindex]{'start'})."\n";
 								$predCount++;
 							}
@@ -70,8 +70,8 @@ sub run {
 				for (my $pindex=0;$pindex<scalar(@{$predictions->{$prefix}[$bin]});$pindex++){
 					# TODO check if virsorter/phispy?
 					if ($seqname eq $predictions->{$prefix}[$bin][$pindex]{'sequence'}){
-						print $queryfh '>'.$prefix.'-'.$seqname.'-'.$predCount."\n";
-						$clusternames{$prefix.'-'.$seqname.'-'.$predCount} = {'prefix'=>$prefix,'sequence'=>$seqname,'bin'=>$bin,'index'=>$pindex, 'length'=>abs($predictions->{$prefix}[$bin][$pindex]{'start'}-$predictions->{$prefix}[$bin][$pindex]{'end'})};
+						print $queryfh '>'.$predictions->{$prefix}[$bin][$pindex]{'name'}."\n";
+						$clusternames{$predictions->{$prefix}[$bin][$pindex]{'name'}} = {'prefix'=>$prefix,'sequence'=>$seqname,'bin'=>$bin,'index'=>$pindex, 'length'=>abs($predictions->{$prefix}[$bin][$pindex]{'start'}-$predictions->{$prefix}[$bin][$pindex]{'end'})};
 						print $queryfh substr($sequence,$predictions->{$prefix}[$bin][$pindex]{'start'}-1,$predictions->{$prefix}[$bin][$pindex]{'end'}-$predictions->{$prefix}[$bin][$pindex]{'start'})."\n";
 						$predCount++;
 					}
@@ -80,7 +80,7 @@ sub run {
 		}
 		close($fastafh)
 	}
-	#print Dumper(%clusternames);
+
 	# Add known_viral_types
 	if(VICSIN::param('known_viral_types') ne "" and -f VICSIN::param('known_viral_types')){
 		open(my $knowntypesfh, '<', VICSIN::param('known_viral_types'));

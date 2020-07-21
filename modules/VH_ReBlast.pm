@@ -51,9 +51,9 @@ sub run {
 							for (my $bin = 0; $bin < 2; $bin++) {
 								foreach my $prediction (@{$predictions->{$prefix}[$bin]}){
 									if ($seqname eq $prediction->{'sequence'} and $prediction->{'end'}-$prediction->{'start'}>=VICSIN::param('reblast_min_contig_length')){
-										print $queryfh '>'.$prefix.'-'.$seqname.'-'.$predCount."\n";
+										print $queryfh '>'.$prediction->{'name'}."\n";
 										print $queryfh substr($sequence,$prediction->{'start'}-1,$prediction->{'end'}-$prediction->{'start'})."\n";
-										$query_lengths{$prefix.'-'.$seqname.'-'.$predCount} = $prediction->{'end'}-$prediction->{'start'}+1;
+										$query_lengths{$prediction->{'name'}} = $prediction->{'end'}-$prediction->{'start'}+1;
 										$predCount++;
 									}
 								}
@@ -75,9 +75,9 @@ sub run {
 					for (my $bin = 0; $bin < 2; $bin++) {
 						foreach my $prediction (@{$predictions->{$prefix}[$bin]}){
 							if ($seqname eq $prediction->{'sequence'}){
-								print $queryfh '>'.$prefix.'-'.$seqname.'-'.$predCount."\n";
+								print $queryfh '>'.$prediction->{'name'}."\n";
 								print $queryfh substr($sequence,$prediction->{'start'}-1,$prediction->{'end'}-$prediction->{'start'})."\n";
-								$query_lengths{$prefix.'-'.$seqname.'-'.$predCount} = $prediction->{'end'}-$prediction->{'start'}+1;
+								$query_lengths{$prediction->{'name'}} = $prediction->{'end'}-$prediction->{'start'}+1;
 								$predCount++;
 							}
 						}
@@ -187,66 +187,17 @@ sub run {
 			}
 		}
 
-		# Combine overlapping results
-		# VH_helpers::log("\t\tCombining results... ",2);
-		# my $found_overlaps;
-		# my @combined_predictions;
-		# do {
-		# 	@combined_predictions = ();
-		# 	$found_overlaps = 0;
-		# 	for (my $i = 0; $i < scalar(@masked_predictions); $i++) {
-		# 		my $found_match = 0;
-		# 		for (my $j = 0; $j < scalar(@combined_predictions); $j++) {
-		# 			#If results overlap
-		# 			if($found_match == 0 and $masked_predictions[$i]{'sequence'}==$combined_predictions[$j]{'sequence'} 
-		# 				and $masked_predictions[$i]{'start'}<=$combined_predictions[$j]{'end'}+VICSIN::param('reblast_distance') 
-		# 				and $combined_predictions[$j]{'start'}<=$masked_predictions[$i]{'end'}+VICSIN::param('reblast_distance')){
-		# 				$found_match = 1;
-		# 				$found_overlaps = 1;
-		# 				# Expand bounds of j to contain i
-		# 				if($masked_predictions[$i]{'start'}<$combined_predictions[$j]{'start'}){
-		# 					$combined_predictions[$j]{'start'} = $masked_predictions[$i]{'start'};
-		# 				}
-		# 				if($masked_predictions[$j]{'end'}>$masked_predictions[$i]{'end'}){
-		# 					$masked_predictions[$i]{'end'} = $masked_predictions[$j]{'end'};
-		# 				}
-		# 			}
-		# 		}
-		# 		if($found_match == 0){
-		# 			# If this prediction doesn't overlap with any others, add it to the array
-		# 			push @combined_predictions, $masked_predictions[$i];
-		# 		}
-		# 	}
-		# 	@masked_predictions = ();
-		# 	push @masked_predictions,@combined_predictions;
-		# } while ($found_overlaps == 1);
+		# get existing prediction counts
+		my %predCount;
+		for (my $bin = 0; $bin <= 3; $bin++) {
+			foreach my $prediction (@{$predictions->{$curprefix}[$bin]}){
+				if(not exists $predCount{$prediction->{'sequence'}}){
+					$predCount{$prediction->{'sequence'}} = 0;
+				}
+				$predCount{$prediction->{'sequence'}}++;
+			}
+		}
 
-		# # Weed out results based on length
-		# VH_helpers::log("\t\tExcluding based on length/% identity... ",2);
-		# my @final_predictions;
-		# my $cur = 0;
-		# foreach my $prediction (@combined_predictions){
-		# 	# TODO implement new rules based on end-ness
-		# 	if($prediction->{'start'} <= VICSIN::param('reblast_edge_distance') xor $prediction->{'end'}>=$contigs->{$curprefix}{$prediction->{'sequence'}}{'length'}-VICSIN::param('reblast_edge_distance')){
-		# 		if($prediction->{'perc_identity'} >= VICSIN::param("reblast_min_perc_id")){
-		# 			# If hit touches either contig end (not both), min 90% ident
-		# 			$prediction->{'reblast'} = [$cur];
-		# 			@final_predictions[$cur] = $prediction;
-		# 			$cur++;
-		# 		}
-		# 	} elsif ($prediction->{'start'}>VICSIN::param('reblast_edge_distance') and $prediction->{'end'}<$contigs->{$curprefix}{$prediction->{'sequence'}}{'length'}-VICSIN::param('reblast_edge_distance')){
-		# 		if($prediction->{'perc_identity'}>=VICSIN::param("reblast_min_perc_id") and $prediction->{'end'}-$prediction->{'start'}>=(VICSIN::param("reblast_min_perc_length")/100.0)*$query_lengths{$prediction->{'query_seq'}}){
-		# 			# If hit touches neither contig end, min 90% ident, min 50% of query length
-		# 			$prediction->{'reblast'} = [$cur];
-		# 			@final_predictions[$cur] = $prediction;
-		# 			$cur++;
-		# 		}
-		# 	}
-		# }
-
-		# $return_predictions{$curprefix} = \@final_predictions;
-
-		# TODO put in new algorithm here
 		# For each R hit
 		VH_helpers::log("\t\tChecking each contig for full coverage...",2);
 		foreach my $contig (keys(%{$contigs->{$curprefix}})) {
@@ -274,7 +225,11 @@ sub run {
 			VH_helpers::log("\t\t\tContig $contig coverage: ".$coverage." out of ".($contigs->{$curprefix}{$contig}{'length'}),2);
 			if($coverage >= $contigs->{$curprefix}{$contig}{'length'} * 0.9 ) {
 				# Add entire contig as prediction to bin 2?3?
-				push @{$predictions->{$curprefix}[3]}, {'sequence'=>$contig,'methods'=>'R','start'=>1,'end'=>$contigs->{$curprefix}{$contig}{'length'}}
+				if(not exists $predCount{$contig}){
+					$predCount{$contig} = 0;
+				}
+				push @{$predictions->{$curprefix}[3]}, {'name'=>$curprefix.'-'.$contig.'-'.$predCount{$contig},'sequence'=>$contig,'methods'=>'R','start'=>1,'end'=>$contigs->{$curprefix}{$contig}{'length'}};
+				$predCount{$contig}++;
 			}
 		}
 
@@ -283,7 +238,7 @@ sub run {
 		for (my $bin = 0; $bin <= 3; $bin++) {
 			foreach my $prediction (@{$predictions->{$curprefix}[$bin]}){
 				my $did_extend = 0;
-				my $set_method = 0;
+				my $set_method = (index($prediction->{'methods'}, 'R') != -1);
 				# Find any non end-adjacent overlapping hits
 				do {
 					my @overlaps = ();

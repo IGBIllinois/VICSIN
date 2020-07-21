@@ -86,6 +86,15 @@ sub get_predictions {
 			my $sequence = $1;
 			my $fragment = $2;
 			my $fragsize = $3;
+
+			# Remove the '-circular' suffix that virsorter sometimes adds to the sequence/fragment
+			if($sequence =~ m/^(.*)-circular$/){
+				$sequence = $1
+			}
+			if($fragment =~ m/^(.*)-circular$/){
+				$fragment = $1
+			}
+
 			if(not exists $genefrags{$sequence}){
 				$genefrags{$sequence} = 0;
 			} else {

@@ -482,15 +482,15 @@ foreach my $prefix (@valid_prefixes){
 	make_path(VICSIN::param('output_path')."/".INTERMEDIATE_OUTPUT_DIR);
 	my $output_file_name = VICSIN::param('output_path')."/".INTERMEDIATE_OUTPUT_DIR."/$prefix.txt";
 	open my $output_fh, '>', $output_file_name;
-	print $output_fh "# Type 1: Predicted by >2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	# print $output_fh "# Type 1: Predicted by >2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[0]);
-	print $output_fh "# Type 2: Predicted by 2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	# print $output_fh "# Type 2: Predicted by 2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[1]);
-	print $output_fh "# Type 3: Predicted by 1 1° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	# print $output_fh "# Type 3: Predicted by 1 1° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[2]);
-	print $output_fh "# Type 4: Predicted by 1 2° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	# print $output_fh "# Type 4: Predicted by 1 2° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[3]);
-	print $output_fh "# Type 5: Protospacer match\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	# print $output_fh "# Type 5: Protospacer match\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[4]);
 	close $output_fh;
 }
@@ -502,66 +502,6 @@ if(VICSIN::param('stop') eq "consensus"){
 
 ### STEP 5. RE-SCREEN PREDICTIONS AGAINST OTHER GENOMES FOR MISSED ELEMENTS ###
 %binned_predictions = %{VH_ReBlast::run(\@valid_prefixes,\%binned_predictions,\%masks,\%contigs)};
-
-# DONT RE-MERGE
-# # Re-process all results
-# VH_helpers::log("Final merge...");
-# foreach my $prefix (@valid_prefixes){
-# 	VH_helpers::log("\tProcessing $prefix... ",1);
-
-# 	#Process VirSorter output
-# 	VH_helpers::log("\t\tParsing VirSorter output... ",2);
-# 	$predictions{$prefix}{'virsorter'} = VH_VirSorter::get_predictions($prefix);
-# 	#Process PhiSpy output
-# 	VH_helpers::log("\t\tParsing PhiSpy output... ",2);
-# 	$predictions{$prefix}{'phispy'} = VH_PhiSpy::get_predictions($prefix);
-# 	#Process CRISPR output
-# 	if($ran_crispr == 1){
-# 		VH_helpers::log("\t\tParsing CRISPR output... ",2);
-# 		$predictions{$prefix}{'crispr'} = VH_CRISPR::get_predictions($prefix);
-# 	}
-# 	#Process AGEnt output
-# 	VH_helpers::log("\t\tParsing Agent output... ",2);
-# 	$predictions{$prefix}{'agent'} = VH_SpineAgent::get_predictions($prefix);
-# 	#Process Known Types Blast output
-# 	if($ran_known_types == 1){
-# 		VH_helpers::log("\t\tParsing Known Types output... ",2);
-# 		$predictions{$prefix}{'blast'} = VH_Blast::get_predictions($prefix);
-# 	}
-
-# 	#Apply masking file
-# 	VICSIN::apply_mask(\%predictions,$prefix,\%masks);
-
-# 	# Merge again
-# 	VH_helpers::log("\t\tMerging predictions... ",2);
-# 	my %mergeable_predictions;
-# 	# Dump mergeable predictions into one array
-# 	for(my$i=0; $i<scalar(@VICSIN::methods); $i++){
-# 		if($VICSIN::methods[$i]{'extend'} == 1){ # We only want to merge Agent, Virsorter, and Blast hits
-# 			foreach my $sequence (keys %{$predictions{$prefix}{$VICSIN::methods[$i]{'key'}}}){
-# 				my @predictions_to_add;
-# 				foreach my $prediction (@{$predictions{$prefix}{$VICSIN::methods[$i]{'key'}}{$sequence}}){
-# 					$prediction->{'methods'} = [$VICSIN::methods[$i]{'abbr'}];
-# 					push @predictions_to_add, $prediction;
-# 				}
-# 				push @{$mergeable_predictions{$sequence}}, @predictions_to_add;
-# 			}
-# 		}
-# 	}
-# 	foreach my $prediction (@{$reblast_predictions->{$prefix}}){
-# 		if(not exists $mergeable_predictions{$prediction->{'sequence'}}){
-# 			$mergeable_predictions{$prediction->{'sequence'}} = [];
-# 		}
-# 		$prediction->{'methods'} = ['R'];
-# 		push @{$mergeable_predictions{$prediction->{'sequence'}}}, $prediction;
-# 	}
-# 	my %merged_predictions = VICSIN::merge_predictions(\%mergeable_predictions);
-
-# 	# Bin again
-# 	VH_helpers::log("\t\tCross-referencing predictions... ",2);
-# 	$binned_predictions{$prefix} = VICSIN::bin_predictions(\%merged_predictions,\%predictions,$prefix);
-# }
-# print "\n";
 
 VH_helpers::log("Saving Output...");
 foreach my $prefix (@valid_prefixes){
@@ -578,15 +518,15 @@ foreach my $prefix (@valid_prefixes){
 	make_path(VICSIN::param('output_path')."/".OUTPUT_DIR);
 	my $output_file_name = VICSIN::param('output_path')."/".OUTPUT_DIR."/$prefix.txt";
 	open my $output_fh, '>', $output_file_name;
-	print $output_fh "# Type 1: Predicted by >2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	# print $output_fh "# Type 1: Predicted by >2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[0]);
-	print $output_fh "# Type 2: Predicted by 2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	# print $output_fh "# Type 2: Predicted by 2 methods\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[1]);
-	print $output_fh "# Type 3: Predicted by 1 1° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	# print $output_fh "# Type 3: Predicted by 1 1° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[2]);
-	print $output_fh "# Type 4: Predicted by 1 2° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	# print $output_fh "# Type 4: Predicted by 1 2° method\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[3]);
-	print $output_fh "# Type 5: Protospacer match\n# Prediction\tSequence\tmethods\tstart\tend\n";
+	# print $output_fh "# Type 5: Protospacer match\n# Prediction\tSequence\tmethods\tstart\tend\n";
 	output_bin($output_fh,$binned_predictions{$prefix}[4]);
 	close $output_fh;
 }

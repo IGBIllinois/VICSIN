@@ -41,7 +41,7 @@ my %params = (
 	"spine_percent_input"=>100,
 	"spine_max_distance"=>10,
 	"spine_agent_min_perc_id"=>85,
-	"spine_agent_min_size_core"=>10,
+	"spine_agent_min_size_core"=>500,
 	"spine_core_file"=>"",
 	"spacer_fasta_file"=>"",
 	"crispr_match_threshold"=>0.9,
@@ -63,7 +63,7 @@ my %params = (
 	"cluster_min_length"=>100,
 	"cluster_min_bit_score"=>100.0,
 	"cluster_core_max_distance"=>10,
-	"cluster_size_threshold"=>2000,
+	"cluster_size_threshold"=>12000,
 	"use_database"=>'false',
 	"database_host"=>'',
 	"database_name"=>'',
@@ -360,6 +360,9 @@ sub bin_predictions {
 	for(my $i=0;$i<scalar @VICSIN::methods; $i++) {
 		if($VICSIN::methods[$i]{'extend'}==0){ # Only compare methods we haven't already merged
 			foreach my $sequence (keys %{ $predictions->{$prefix}{$VICSIN::methods[$i]{'key'}}}){
+				if (not exists $predCount{$sequence}){
+					$predCount{$sequence} = 0;
+				}
 				foreach my $prediction ( @{ $predictions->{$prefix}{$VICSIN::methods[$i]{'key'}}{$sequence} }){
 					if(not exists $prediction->{'used'} and $prediction->{'start'}>0 and $prediction->{'end'}>0){ 
 						my $used_methods = $VICSIN::methods[$i]{'abbr'};
