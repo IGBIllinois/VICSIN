@@ -1,5 +1,7 @@
 # VICSIN
 
+[![DOI](https://zenodo.org/badge/98227803.svg)](https://zenodo.org/badge/latestdoi/98227803)
+
 Viral, Integrative, and Conjugative Sequence Identification and Networking
 
 ## Dependencies
